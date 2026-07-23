@@ -1,0 +1,400 @@
+    return true;
+  }
+
+  runtimeState.recentSignals.set(fingerprint, Date.now());
+  return false;
+}
+
+function adminAuthorized(req, requestUrl) {
+  if (!CFG.adminToken) return false;
+
+  const headerToken =
+    String(req.headers['x-admin-token'] || '');
+
+  const queryToken =
+    requestUrl.searchParams.get('token') || '';
+
+  return (
+    headerToken === CFG.adminToken ||
+    queryToken === CFG.adminToken
+  );
+}
+
+function safeJson(value) {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}
+
+function dashboardHtml() {
+  resetDailyStateIfNeeded();
+
+  const state = {
+    account: CFG.account,
+    environment: 'Tradovate Demo',
+    accountId,
+    connected: !!accessToken && Date.now() < tokenExpiry,
+    paused: runtimeState.paused,
+    entriesEnabled: runtimeState.entriesEnabled,
+    maxContracts: CFG.maxContracts,
+    maxDailyTrades: CFG.maxDailyTrades,
+    duplicateWindowSeconds: CFG.duplicateWindowSeconds,
+    uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+    daily: {
+      ...runtimeState.daily,
+      estimatedRealizedDollars: Number(
+        runtimeState.daily.estimatedRealizedDollars.toFixed(2)
+      ),
+    },
+    positions,
+    lastSignal: runtimeState.lastSignal,
+    lastOrder: runtimeState.lastOrder,
+  };
+
+  const embeddedState = safeJson(state);
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tradovate Futures Bot</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111827;
+      color: #f3f4f6;
+      margin: 0;
+      padding: 24px;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: auto;
+    }
+    h1 {
+      margin-top: 0;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 14px;
+    }
+    .card {
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .label {
+      color: #9ca3af;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+    .value {
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .good { color: #34d399; }
+    .bad { color: #f87171; }
+    .warn { color: #fbbf24; }
+    button {
+      border: 0;
+      border-radius: 7px;
+      padding: 11px 15px;
+      margin: 5px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    button.safe { background: #10b981; color: white; }
+    button.warn { background: #f59e0b; color: #111827; }
+    button.stop { background: #ef4444; color: white; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #111827;
+      padding: 12px;
+      border-radius: 7px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Tradovate Futures Bot</h1>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Connection</div>
+      <div class="value \${state.connected ? 'good' : 'bad'}">
+        \${state.connected ? 'CONNECTED' : 'DISCONNECTED'}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Environment</div>
+      <div class="value">\${state.environment}</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Trading State</div>
+      <div class="value \${state.paused ? 'bad' : 'good'}">
+        \${state.paused ? 'PAUSED' : 'RUNNING'}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">New Entries</div>
+      <div class="value \${state.entriesEnabled ? 'good' : 'warn'}">
+        \${state.entriesEnabled ? 'ENABLED' : 'DISABLED'}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Today's Entries</div>
+      <div class="value">
+        \${state.daily.trades} / \${state.maxDailyTrades}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Estimated Realized P&L</div>
+      <div class="value \${state.daily.estimatedRealizedDollars >= 0 ? 'good' : 'bad'}">
+        $\${state.daily.estimatedRealizedDollars.toFixed(2)}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Open Internal Positions</div>
+      <div class="value">\${Object.keys(state.positions).length}</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Maximum Contracts</div>
+      <div class="value">\${state.maxContracts}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Controls</h2>
+    <button class="stop" onclick="control('PAUSE')">Pause Trading</button>
+    <button class="safe" onclick="control('RESUME')">Resume Trading</button>
+    <button class="warn" onclick="control('DISABLE_ENTRIES')">
+      Disable New Entries
+    </button>
+    <button class="safe" onclick="control('ENABLE_ENTRIES')">
+      Enable New Entries
+    </button>
+    <p id="controlResult"></p>
+  </div>
+
+  <div class="card">
+    <h2>Positions</h2>
+    <pre>\${JSON.stringify(state.positions, null, 2)}</pre>
+  </div>
+
+  <div class="card">
+    <h2>Last Signal</h2>
+    <pre>\${JSON.stringify(state.lastSignal, null, 2)}</pre>
+  </div>
+
+  <div class="card">
+    <h2>Last Order</h2>
+    <pre>\${JSON.stringify(state.lastOrder, null, 2)}</pre>
+  </div>
+</div>
+
+<script>
+  const state = ${embeddedState};
+
+  async function control(action) {
+    const token = new URLSearchParams(location.search).get('token');
+
+    if (!token) {
+      document.getElementById('controlResult').textContent =
+        'Missing dashboard token in URL.';
+      return;
+    }
+
+    const response = await fetch('/control', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Token': token
+      },
+      body: JSON.stringify({ action })
+    });
+
+    const result = await response.json();
+
+    document.getElementById('controlResult').textContent =
+      JSON.stringify(result);
+
+    if (response.ok) {
+      setTimeout(() => location.reload(), 400);
+    }
+  }
+
+  setTimeout(() => location.reload(), 15000);
+</script>
+</body>
+</html>`;
+}
+
+// ── REST helper ──────────────────────────────────────────────────────────────
+function tvPost(endpoint, body, token) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify(body);
+    const url     = new URL(CFG.baseUrl + endpoint);
+    const opts = {
+      hostname: url.hostname,
+      path:     url.pathname,
+      method:   'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    };
+    const req = https.request(opts, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { resolve(data); }
+      });
+    });
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+function tvGet(endpoint, token) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(CFG.baseUrl + endpoint);
+    const opts = {
+      hostname: url.hostname,
+      // BUG FIX: url.pathname alone drops the query string entirely --
+      // every GET call through this function (findContract's ?name=...,
+      // getquote's ?symbol=...) was silently being sent with NO query
+      // parameters at all. Must include url.search to actually send them.
+      path:     url.pathname + url.search,
+      method:   'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    };
+    const req = https.request(opts, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { resolve(data); }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+// ── Authentication ────────────────────────────────────────────────────────────
+async function authenticate() {
+  if (accessToken && Date.now() < tokenExpiry - 60000) return accessToken;
+  log('auth_attempt');
+  const res = await tvPost('/auth/accesstokenrequest', {
+    name:       CFG.username || CFG.account,
+    password:   CFG.password,
+    appId:      CFG.appId,
+    appVersion: CFG.appVersion,
+    cid:        parseInt(CFG.cid, 10),
+    sec:        CFG.secret,
+    deviceId:   CFG.deviceId,
+  });
+  if (!res.accessToken) {
+    log('auth_failed', { res });
+    throw new Error('Auth failed: ' + JSON.stringify(res));
+  }
+  accessToken = res.accessToken;
+  tokenExpiry = Date.now() + (res.expirationTime
+    ? new Date(res.expirationTime).getTime() - Date.now()
+    : 3600000);
+  log('auth_ok', { expiresIn: Math.round((tokenExpiry - Date.now()) / 1000) + 's' });
+  return accessToken;
+}
+
+// ── Account resolution ────────────────────────────────────────────────────────
+async function resolveAccount() {
+  if (accountId) return accountId;
+  const token = await authenticate();
+  const accounts = await tvGet('/account/list', token);
+  const acct = accounts.find(a =>
+    a.name === CFG.account || String(a.id) === CFG.account
+  );
+  if (!acct) throw new Error(`Account ${CFG.account} not found`);
+  accountId = acct.id;
+  log('account_resolved', { accountId, name: acct.name, balance: acct.cashBalance });
+  return accountId;
+}
+
+// ── Contract lookup ───────────────────────────────────────────────────────────
+async function findContract(symbol) {
+  const token = await authenticate();
+
+  // Tradable September 2026 contracts.
+  // Continuous symbols such as @MES can be queried but cannot be traded.
+  const activeContracts = {
+    MES: 'MESU6',
+    MNQ: 'MNQU6',
+    MYM: 'MYMU6',
+  };
+
+  const root = String(symbol).replace('@', '').toUpperCase();
+  const lookupSymbol = activeContracts[root] || symbol;
+
+  const res = await tvGet(
+    `/contract/find?name=${encodeURIComponent(lookupSymbol)}`, token
+  );
+
+  if (!res || !res.id) {
+    throw new Error(
+      `Contract not found: ${symbol} (looked up as ${lookupSymbol})`
+    );
+  }
+
+  return res;
+}
+
+function rootFromContractName(name) {
+  const upper =
+    String(name || '')
+      .replace('@', '')
+      .toUpperCase();
+
+  if (upper.startsWith('MES')) return 'MES';
+  if (upper.startsWith('MNQ')) return 'MNQ';
+  if (upper.startsWith('MYM')) return 'MYM';
+
+  return upper.slice(0, 3);
+}
+
+async function getBrokerPositions() {
+  const token = await authenticate();
+  const acctId = await resolveAccount();
+  const response = await tvGet('/position/list', token);
+
+  if (!Array.isArray(response)) {
+    throw new Error(
+      'Unexpected /position/list response: ' +
+      JSON.stringify(response)
+    );
+  }
+
+  const relevant = response.filter(position => {
+    const sameAccount =
+      Number(position.accountId) === Number(acctId);
+
+    const netPos = Number(position.netPos || 0);
+
+    return sameAccount && netPos !== 0;
+  });
+

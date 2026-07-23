@@ -1,0 +1,400 @@
+  const result = [];
+
+  for (const brokerPosition of relevant) {
+    let contractName =
+      brokerPosition.contractName ||
+      brokerPosition.symbol ||
+      null;
+
+    if (!contractName && brokerPosition.contractId) {
+      const contract = await tvGet(
+        '/contract/item?id=' +
+        encodeURIComponent(brokerPosition.contractId),
+        token
+      );
+
+      contractName =
+        contract && contract.name
+          ? contract.name
+          : null;
+    }
+
+    if (!contractName) {
+      log('reconcile_contract_name_missing', {
+        brokerPosition,
+      });
+      continue;
+    }
+
+    const netPos = Number(brokerPosition.netPos || 0);
+    const root = rootFromContractName(contractName);
+
+    if (!['MES', 'MNQ', 'MYM'].includes(root)) {
+      continue;
+    }
+
+    const rawPrice =
+      brokerPosition.netPrice ??
+      brokerPosition.avgPrice ??
+      brokerPosition.averagePrice ??
+      brokerPosition.price ??
+      null;
+
+    const averagePrice = Number(rawPrice);
+
+    result.push({
+      symbol: root,
+      contractName,
+      contractId: brokerPosition.contractId || null,
+      direction: netPos > 0 ? 'long' : 'short',
+      qty: Math.abs(netPos),
+      averagePrice:
+        Number.isFinite(averagePrice) && averagePrice > 0
+          ? averagePrice
+          : null,
+      raw: brokerPosition,
+    });
+  }
+
+  return result;
+}
+
+function createReconciledPosition(brokerPosition) {
+  const key = posKey(
+    brokerPosition.symbol,
+    brokerPosition.direction
+  );
+
+  const entryPrice = brokerPosition.averagePrice;
+
+  positions[key] = {
+    symbol: brokerPosition.symbol,
+    direction: brokerPosition.direction,
+    entryPrice,
+    atrAtEntry: null,
+    qty: brokerPosition.qty,
+    stopPrice: null,
+    armed: false,
+    peak: entryPrice,
+    trailLine: null,
+    barsHeld: 0,
+    signalTs: null,
+    openTs: Date.now(),
+    reconciledFromBroker: true,
+    externallyManaged: true,
+    contractName: brokerPosition.contractName,
+  };
+
+  return key;
+}
+
+async function reconcilePositions(source = 'interval') {
+  if (reconciliationRunning) {
+    return reconciliationState;
+  }
+
+  reconciliationRunning = true;
+  reconciliationState.lastRunTs =
+    new Date().toISOString();
+  reconciliationState.lastError = null;
+  reconciliationState.mismatches = [];
+
+  try {
+    const brokerPositions =
+      await getBrokerPositions();
+
+    reconciliationState.brokerPositions =
+      brokerPositions.map(position => ({
+        symbol: position.symbol,
+        contractName: position.contractName,
+        direction: position.direction,
+        qty: position.qty,
+        averagePrice: position.averagePrice,
+      }));
+
+    const brokerBySymbol = new Map();
+
+    for (const brokerPosition of brokerPositions) {
+      brokerBySymbol.set(
+        brokerPosition.symbol,
+        brokerPosition
+      );
+    }
+
+    for (const [key, internalPosition] of
+      Object.entries(positions)) {
+
+      const brokerPosition =
+        brokerBySymbol.get(internalPosition.symbol);
+
+      if (!brokerPosition) {
+        reconciliationState.mismatches.push({
+          type: 'internal_position_not_at_broker',
+          key,
+          symbol: internalPosition.symbol,
+          direction: internalPosition.direction,
+          qty: internalPosition.qty,
+        });
+
+        log('reconcile_removed_phantom_position', {
+          key,
+          internalPosition,
+        });
+
+        delete positions[key];
+        continue;
+      }
+
+      if (
+        brokerPosition.direction !==
+        internalPosition.direction
+      ) {
+        reconciliationState.mismatches.push({
+          type: 'direction_mismatch',
+          key,
+          symbol: internalPosition.symbol,
+          internalDirection:
+            internalPosition.direction,
+          brokerDirection:
+            brokerPosition.direction,
+        });
+
+        delete positions[key];
+        createReconciledPosition(brokerPosition);
+        brokerBySymbol.delete(internalPosition.symbol);
+        continue;
+      }
+
+      const internalQty =
+        Math.max(1, Number(internalPosition.qty) || 1);
+
+      if (internalQty !== brokerPosition.qty) {
+        reconciliationState.mismatches.push({
+          type: 'quantity_mismatch',
+          key,
+          symbol: internalPosition.symbol,
+          internalQty,
+          brokerQty: brokerPosition.qty,
+        });
+
+        internalPosition.qty = brokerPosition.qty;
+      }
+
+      brokerBySymbol.delete(internalPosition.symbol);
+    }
+
+    for (const brokerPosition of
+      brokerBySymbol.values()) {
+
+      const key =
+        createReconciledPosition(brokerPosition);
+
+      reconciliationState.mismatches.push({
+        type: 'broker_position_missing_internally',
+        key,
+        symbol: brokerPosition.symbol,
+        direction: brokerPosition.direction,
+        qty: brokerPosition.qty,
+      });
+
+      log('reconcile_imported_broker_position', {
+        key,
+        symbol: brokerPosition.symbol,
+        direction: brokerPosition.direction,
+        qty: brokerPosition.qty,
+        averagePrice: brokerPosition.averagePrice,
+      });
+    }
+
+    reconciliationState.safetyLock =
+      Object.values(positions).some(position =>
+        position.externallyManaged === true
+      );
+
+    reconciliationState.lastSuccessTs =
+      new Date().toISOString();
+
+    log('position_reconciliation_complete', {
+      source,
+      brokerPositions:
+        reconciliationState.brokerPositions,
+      internalPositions:
+        Object.keys(positions),
+      mismatches:
+        reconciliationState.mismatches,
+      safetyLock:
+        reconciliationState.safetyLock,
+    });
+
+    persistAllState();
+    return reconciliationState;
+  } catch (error) {
+    reconciliationState.safetyLock = true;
+    reconciliationState.lastError = error.message;
+
+    log('position_reconciliation_error', {
+      source,
+      error: error.message,
+    });
+
+    persistReconciliation();
+    return reconciliationState;
+  } finally {
+    reconciliationRunning = false;
+  }
+}
+
+// ── Order placement ────────────────────────────────────────────────────────────
+async function placeOrder(symbol, action, qty = 1) {
+  const token   = await authenticate();
+  const acctId  = await resolveAccount();
+  const contract = await findContract(symbol);
+
+  const body = {
+    accountSpec:   CFG.account,
+    accountId:     acctId,
+    action:        action,           // 'Buy' or 'Sell'
+    symbol:        contract.name,
+    orderQty:      qty,
+    orderType:     'Market',
+    isAutomated:   true,
+    contractId:    contract.id,
+  };
+
+  const res = await tvPost('/order/placeorder', body, token);
+
+  runtimeState.lastOrder = {
+    ts: new Date().toISOString(),
+    symbol,
+    action,
+    qty,
+    orderId: res && res.orderId ? res.orderId : null,
+    failureReason:
+      res && res.failureReason
+        ? res.failureReason
+        : null,
+  };
+
+  log('order_placed', {
+    symbol,
+    action,
+    qty,
+    orderId: res && res.orderId,
+    res
+  });
+
+  persistRuntime();
+  return res;
+}
+
+// ── Position management ────────────────────────────────────────────────────────
+function posKey(symbol, direction) {
+  return `${symbol}_${direction}`;
+}
+
+function openPosition(
+  symbol,
+  direction,
+  entryPrice,
+  atrAtEntry,
+  signalTs,
+  qty
+) {
+  const key  = posKey(symbol, direction);
+  const stopMult = getStopMult(symbol);
+  const stop = direction === 'long'
+    ? entryPrice - stopMult * atrAtEntry
+    : entryPrice + stopMult * atrAtEntry;
+
+  positions[key] = {
+    symbol,
+    direction,
+    entryPrice,
+    atrAtEntry,
+    qty,
+    stopPrice: stop,
+    armed:     false,
+    peak:      entryPrice,
+    trailLine: null,
+    barsHeld:  0,
+    signalTs,
+    openTs:    Date.now(),
+  };
+  log('position_opened', {
+    key,
+    entryPrice,
+    stopPrice: stop,
+    qty
+  });
+
+  persistPositions();
+
+  ntfyPush(
+    `ENTRY: ${symbol} ${direction.toUpperCase()}`,
+    `Entry: ${entryPrice}\nStop: ${stop.toFixed(2)}\nATR: ${atrAtEntry.toFixed(2)}`,
+    'default', 'chart_with_upwards_trend'
+  );
+}
+
+async function closePosition(key, exitReason, currentPrice) {
+  const pos = positions[key];
+  if (!pos) return;
+  const action = pos.direction === 'long' ? 'Sell' : 'Buy';
+  let closeOrder;
+
+  try {
+    closeOrder = await placeOrder(
+      pos.symbol,
+      action,
+      pos.qty || 1
+    );
+  } catch (e) {
+    log('close_order_error', {
+      key,
+      error: e.message
+    });
+    return false;
+  }
+
+  const closeFailed =
+    !closeOrder ||
+    !closeOrder.orderId ||
+    closeOrder.failureReason;
+
+  if (closeFailed) {
+    log('close_order_rejected', {
+      key,
+      symbol: pos.symbol,
+      action,
+      qty: pos.qty || 1,
+      closeOrder,
+    });
+    return false;
+  }
+
+  const pnlPts = pos.direction === 'long'
+    ? currentPrice - pos.entryPrice
+    : pos.entryPrice - currentPrice;
+
+  recordEstimatedRealized(
+    pos.symbol,
+    pnlPts,
+    pos.qty || 1
+  );
+
+  log('position_closed', {
+    key, exitReason, entryPrice: pos.entryPrice,
+    exitPrice: currentPrice, pnlPts: pnlPts.toFixed(2),
+    armed: pos.armed, barsHeld: pos.barsHeld,
+  });
+  const pnlIsWin = pnlPts > 0;
+  ntfyPush(
+    `${pnlIsWin ? 'WIN' : 'LOSS'}: ${pos.symbol} ${pos.direction.toUpperCase()} (${exitReason})`,
+    `Entry: ${pos.entryPrice}\nExit: ${currentPrice}\nP&L: ${pnlPts.toFixed(2)} pts\nBars held: ${pos.barsHeld}\nArmed: ${pos.armed}`,
+    pnlIsWin ? 'default' : 'high',
+    pnlIsWin ? 'white_check_mark' : 'rotating_light'
+  );
+  delete positions[key];
+  persistAllState();
+  return true;
+}

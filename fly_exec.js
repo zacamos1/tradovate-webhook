@@ -1,0 +1,356 @@
+/* fly_exec.js — STAGE 3 of the premium execution module.
+ *
+ * Isolated iron-fly execution that REUSES server.js's already-connected `ib` object
+ * (one connection, one market-data session — no 10197 contention). Kept in a separate
+ * module so it physically cannot corrupt the directional trailing-stop logic in server.js.
+ *
+ * Submits the fly as TWO vertical credit spreads (call spread + put spread), which the
+ * IBKR paper simulator accepts (the single 4-leg BAG got error 201). Uses SNAPSHOT market
+ * data (one-shot, auto-cancels) so its ticks never flow into server.js's streaming
+ * tickPrice handler used by the directional trail.
+ *
+ * SAFETY:
+ *   - Refuses any account not starting with 'D' (paper only).
+ *   - Isolated snapshot reqId range (>= 900000) so ticks are self-identified.
+ *   - Resolves 4 legs with the 2SPY/2XSP trading-class guard.
+ *   - Places at most two orders (call vertical + put vertical) per call.
+ *
+ * Exported: placeFly(ib, opts) -> Promise<result>
+ *   opts = { symbol, center, wing, contracts, account, expiry?, log? }
+ */
+
+const { EventName, SecType, OrderAction, OrderType } = require('@stoqey/ib');
+
+const FLY_REQ_BASE = 900000;   // snapshot + contractDetails reqIds live up here, away from server.js
+
+function todayUTC() {
+  const n = new Date();
+  return n.getUTCFullYear().toString()
+    + String(n.getUTCMonth() + 1).padStart(2, '0')
+    + String(n.getUTCDate()).padStart(2, '0');
+}
+
+/**
+ * Place one iron fly as two vertical credit spreads on a PAPER account, reusing an
+ * already-connected ib object. Returns a promise resolving to a result summary.
+ */
+function placeFly(ib, opts) {
+  const {
+    symbol, center, wing,
+    contracts = 1,
+    account,
+    expiry = todayUTC(),
+    log = (m) => console.log(m),
+    getOrderId,                 // function returning a fresh unique orderId from server.js
+    callCredit: modelCall,      // optional model prices — if BOTH provided, snapshots are skipped
+    putCredit:  modelPut,
+  } = opts;
+
+  // ---- fly identity: one ID stamped on every leg, order, and ledger event ----
+  const FLY_ID = `fly_${expiry || todayUTC()}_${symbol}_${Math.random().toString(16).slice(2, 6)}`;
+  const ledger = (event, extra) => {
+    try {
+      require('fs').appendFileSync(require('path').join(__dirname, 'fly_ledger.jsonl'),
+        JSON.stringify(Object.assign({ ts: new Date().toISOString(), flyId: FLY_ID, symbol, expiry, event }, extra || {})) + '\n');
+    } catch (e) { log('[fly] ledger write failed: ' + e.message); }
+  };
+
+  return new Promise((resolve) => {
+    // ---- safety guards ----
+    if (!symbol || !center || !wing) return resolve({ ok:false, error:'missing symbol/center/wing' });
+    if (!/^D/.test(account || '')) return resolve({ ok:false, error:`refusing non-paper account "${account}"` });
+    if (typeof getOrderId !== 'function') return resolve({ ok:false, error:'getOrderId fn required' });
+    if (!ib) return resolve({ ok:false, error:'no ib connection passed' });
+
+    const legDefs = [
+      { tag:'SHORT_CALL', right:'C', strike: center },
+      { tag:'LONG_CALL',  right:'C', strike: center + wing },
+      { tag:'SHORT_PUT',  right:'P', strike: center },
+      { tag:'LONG_PUT',   right:'P', strike: center - wing },
+    ];
+
+    const resolved = {};        // tag -> {conId, tradingClass}
+    const quotes = {};          // tag -> {bid, ask, last}
+    const cdReqToTag = {};      // contractDetails reqId -> tag
+    const snapReqToTag = {};    // snapshot reqId -> tag
+    let reqCounter = FLY_REQ_BASE + Math.floor(Math.random()*10000); // avoid clashing across concurrent calls
+    let phase = 'resolve';
+    let finished = false;
+
+    function cleanup() {
+      ib.off(EventName.contractDetails, onCD);
+      ib.off(EventName.tickPrice, onTick);
+      ib.off(EventName.tickSnapshotEnd, onSnapEnd);
+      ib.off(EventName.orderStatus, onOrderStatus);
+      ib.off(EventName.error, onErr);
+    }
+    function finish(result) {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      resolve(result);
+    }
+
+    // ---- resolve 4 legs ----
+    function onCD(reqId, details) {
+      const tag = cdReqToTag[reqId];
+      if (!tag || resolved[tag]) return;
+      const c = details.contract;
+      if (c.tradingClass !== symbol) {
+        return finish({ ok:false, error:`${tag}: tradingClass "${c.tradingClass}" != "${symbol}" (2${symbol}-type). Aborted before any order.` });
+      }
+      resolved[tag] = { conId: c.conId, tradingClass: c.tradingClass };
+      if (Object.keys(resolved).length === legDefs.length && phase === 'resolve') {
+        phase = 'quote';
+        log(`[fly] ${symbol} legs resolved: ` + legDefs.map(l => `${l.tag}=${resolved[l.tag].conId}`).join(' '));
+        try {   // publish leg conIds so the EOD-flatten (and cleanup tools) can exclude/act on them
+          const fs2 = require('fs'), path2 = require('path');
+          const p = path2.join(__dirname, 'fly_legs_today.json');
+          let d = { date: expiry, conIds: [], shorts: [] };
+          try { const j = JSON.parse(fs2.readFileSync(p, 'utf8')); if (j.date === expiry) d = j; } catch (e) {}
+          for (const l of legDefs) {
+            const cid = resolved[l.tag].conId;
+            if (!d.conIds.includes(cid)) d.conIds.push(cid);
+            if (l.tag.startsWith('SHORT') && !d.shorts.includes(cid)) d.shorts.push(cid);
+          }
+          fs2.writeFileSync(p, JSON.stringify(d));
+        } catch (e) { log('[fly] leg-file write failed: ' + e.message); }
+        ledger('legs_resolved', { center, wing, contracts, account,
+          legs: Object.fromEntries(legDefs.map(l => [l.tag, resolved[l.tag].conId])),
+          shorts: legDefs.filter(l => l.tag.startsWith('SHORT')).map(l => resolved[l.tag].conId) });
+        if (modelCall != null && modelPut != null) {
+          priceAndSubmit();          // model-priced: no market data needed
+        } else {
+          requestSnapshots();
+        }
+      }
+    }
+
+    // ---- snapshot quotes (one-shot, auto-cancel) ----
+    function requestSnapshots() {
+      for (const leg of legDefs) {
+        const reqId = reqCounter++;
+        snapReqToTag[reqId] = leg.tag;
+        // snapshot=true -> one-shot, IB auto-cancels after delivering
+        ib.reqMktData(reqId, { conId: resolved[leg.tag].conId, exchange:'SMART', currency:'USD', secType: SecType.OPT }, '', true, false);
+      }
+      // fallback: price whatever we have after 8s even if a snapshotEnd was missed
+      setTimeout(() => { if (phase === 'quote') priceAndSubmit(); }, 8000);
+    }
+    function onTick(reqId, field, price) {
+      const tag = snapReqToTag[reqId];
+      if (!tag) return;                      // not ours — ignore (protects directional trail)
+      quotes[tag] = quotes[tag] || {};
+      if (field === 1) quotes[tag].bid = price;
+      else if (field === 2) quotes[tag].ask = price;
+      else if (field === 4) quotes[tag].last = price;
+    }
+    function onSnapEnd(reqId) {
+      const tag = snapReqToTag[reqId];
+      if (!tag) return;
+      quotes[tag]._done = true;
+      if (legDefs.every(l => quotes[l.tag] && quotes[l.tag]._done) && phase === 'quote') {
+        priceAndSubmit();
+      }
+    }
+
+    function mid(tag) {
+      const q = quotes[tag] || {};
+      if (q.bid != null && q.ask != null && q.bid >= 0 && q.ask > 0) return (q.bid + q.ask)/2;
+      if (q.last != null && q.last > 0) return q.last;
+      return null;
+    }
+
+    function vertical(shortTag, longTag) {
+      return {
+        symbol, secType: SecType.BAG, currency:'USD', exchange:'SMART',
+        comboLegs: [
+          { conId: resolved[shortTag].conId, ratio:1, action:'SELL', exchange:'SMART' },
+          { conId: resolved[longTag].conId,  ratio:1, action:'BUY',  exchange:'SMART' },
+        ],
+      };
+    }
+
+    // ---- price + submit two verticals ----
+    const fills = {};           // 'CALL'/'PUT' -> avgFillPrice
+    const orderTag = {};        // orderId -> 'CALL'/'PUT'
+    function priceAndSubmit() {
+      if (phase !== 'quote') return;
+      phase = 'submit';
+
+      let callCredit, putCredit;
+      if (modelCall != null && modelPut != null) {
+        callCredit = +(+modelCall).toFixed(2);
+        putCredit  = +(+modelPut).toFixed(2);
+        log(`[fly] MODEL-PRICED call=$${callCredit} put=$${putCredit} (snapshots skipped)`);
+      } else {
+        const mSC = mid('SHORT_CALL'), mLC = mid('LONG_CALL'), mSP = mid('SHORT_PUT'), mLP = mid('LONG_PUT');
+        log(`[fly] mids SC=${mSC} LC=${mLC} SP=${mSP} LP=${mLP}`);
+        if ([mSC,mLC,mSP,mLP].some(v => v == null)) {
+          return finish({ ok:false, error:'missing quotes — cannot price (market open? data perms?)' });
+        }
+        callCredit = +(mSC - mLC).toFixed(2);
+        putCredit  = +(mSP - mLP).toFixed(2);
+      }
+      if (callCredit <= 0 || putCredit <= 0) {
+        return finish({ ok:false, error:`non-credit vertical: call=${callCredit} put=${putCredit}` });
+      }
+      const totalCredit = +(callCredit + putCredit).toFixed(2);
+      log(`[fly] ${symbol} call-credit $${callCredit}  put-credit $${putCredit}  total $${totalCredit}`);
+
+      const callId = getOrderId();
+      const putId  = getOrderId();
+      orderTag[callId] = 'CALL';
+      orderTag[putId]  = 'PUT';
+
+      // IB combo semantics: legs execute AS DEFINED on a BUY order (SELL reverses
+      // them). Enter the credit vertical as BUY @ negative price = receive credit.
+      // (SELL @ +credit reversed the legs -> 'riskless combination' 201.)
+      const mkOrder = (credit) => ({
+        action: OrderAction.BUY, orderType: OrderType.LMT, totalQuantity: contracts,
+        lmtPrice: -Math.abs(credit), account, orderRef: FLY_ID, transmit: true, tif: 'DAY',
+      });
+
+      log(`[fly] SUBMIT ${symbol} CALL vertical id=${callId} SELL @ $${callCredit} x${contracts}`);
+      ib.placeOrder(callId, vertical('SHORT_CALL','LONG_CALL'), mkOrder(callCredit));
+      log(`[fly] SUBMIT ${symbol} PUT  vertical id=${putId} SELL @ $${putCredit} x${contracts}`);
+      ib.placeOrder(putId, vertical('SHORT_PUT','LONG_PUT'), mkOrder(putCredit));
+      ledger('submitted', { callCredit, putCredit, callOrderId: callId, putOrderId: putId });
+
+      // resolve after 25s: both / neither / orphan (cancel -> chase -> flatten)
+      setTimeout(() => resolveFills(), 25000);
+
+      function resultBase(extra) {
+        const c = fills.CALL, p = fills.PUT;
+        const both = c != null && p != null;
+        return Object.assign({
+          symbol, center, wing, contracts, account, expiry,
+          callCredit, putCredit,
+          fills: { CALL: c ?? null, PUT: p ?? null, FLATTEN: fills.FLATTEN ?? null },
+          real_fill_credit:  both ? +((c + p).toFixed(2)) : null,                       // per-fly credit ($/share)
+          real_fill_dollars: both ? +(((c + p) * 100 * contracts)).toFixed(2) : null,   // total $ received
+        }, extra);
+      }
+
+      function resolveFills() {
+        const cF = fills.CALL != null, pF = fills.PUT != null;
+
+        if (cF && pF) {
+          ledger('filled', { fills: { CALL: fills.CALL, PUT: fills.PUT } });
+          return finish(resultBase({ ok:true, note:'both verticals filled — iron fly complete' }));
+        }
+
+        if (!cF && !pF) {
+          log(`[fly] no fills in 25s — cancelling both (model call $${callCredit} / put $${putCredit} did not cross)`);
+          try { ib.cancelOrder(callId); } catch(e) { log(`[fly] cancel call err: ${e.message||e}`); }
+          try { ib.cancelOrder(putId);  } catch(e) { log(`[fly] cancel put err: ${e.message||e}`);  }
+          ledger('no_fill', { callCredit, putCredit });
+          return finish(resultBase({ ok:false,
+            note:'no fills — both orders cancelled; model credits did not cross, shade and retry' }));
+        }
+
+        // ---- ORPHAN: exactly one vertical filled ----------------------------
+        const filledTag  = cF ? 'CALL' : 'PUT';
+        const missingTag = cF ? 'PUT'  : 'CALL';
+        const sitterId   = cF ? putId  : callId;
+        const missingModel = missingTag === 'CALL' ? callCredit : putCredit;
+        const chaseCredit  = Math.max(+((missingModel * 0.85).toFixed(2)), 0.01);
+
+        log(`[fly] ORPHAN: ${filledTag} filled, ${missingTag} sitting — cancelling sitter, chasing @ $${chaseCredit} (85% of model)`);
+        ledger('orphaned', { filled: filledTag, filledAt: fills[filledTag], chasing: missingTag, chaseCredit });
+        try { ib.cancelOrder(sitterId); } catch(e) { log(`[fly] cancel sitter err: ${e.message||e}`); }
+
+        const chaseId = getOrderId();
+        orderTag[chaseId] = missingTag;   // onOrderStatus records its fill under CALL/PUT automatically
+        const chaseCombo = missingTag === 'CALL' ? vertical('SHORT_CALL','LONG_CALL')
+                                                 : vertical('SHORT_PUT','LONG_PUT');
+        setTimeout(() => {                // let the cancel land first
+          log(`[fly] CHASE ${symbol} ${missingTag} vertical id=${chaseId} SELL @ $${chaseCredit} x${contracts}`);
+          ib.placeOrder(chaseId, chaseCombo, mkOrder(chaseCredit));
+        }, 1500);
+
+        // chase window: ~12.5s working after the 1.5s cancel gap
+        setTimeout(() => {
+          if (fills.CALL != null && fills.PUT != null) {
+            ledger('filled', { via: 'chase', fills: { CALL: fills.CALL, PUT: fills.PUT } });
+            return finish(resultBase({ ok:true, chased:missingTag,
+              note:`fly complete — ${missingTag} filled on chase @ ~$${chaseCredit}` }));
+          }
+
+          // ---- chase failed: flatten the filled vertical ---------------------
+          try { ib.cancelOrder(chaseId); } catch(e) { log(`[fly] cancel chase err: ${e.message||e}`); }
+          const filledCredit = fills[filledTag];
+          const flatDebit = Math.max(+((filledCredit * 1.5).toFixed(2)), +((filledCredit + 0.05).toFixed(2)));
+          const flatId = getOrderId();
+          orderTag[flatId] = 'FLATTEN';
+          const flatCombo = filledTag === 'CALL' ? vertical('SHORT_CALL','LONG_CALL')
+                                                 : vertical('SHORT_PUT','LONG_PUT');
+          log(`[fly] chase failed — FLATTEN ${filledTag} vertical id=${flatId} BUY back @ $${flatDebit} (sold @ $${filledCredit})`);
+          setTimeout(() => {
+            // closing = SELL the combo (reverses legs back); paying a debit =
+            // negative price on the SELL side, mirroring the entry convention.
+            ib.placeOrder(flatId, flatCombo, {
+              action: OrderAction.SELL, orderType: OrderType.LMT, totalQuantity: contracts,
+              lmtPrice: -Math.abs(flatDebit), account, orderRef: FLY_ID, transmit: true, tif: 'DAY',
+            });
+          }, 1500);
+
+          // flatten window: ~10.5s
+          setTimeout(() => {
+            if (fills.FLATTEN != null) {
+              const plDollars = +(((filledCredit - fills.FLATTEN) * 100 * contracts).toFixed(2));
+              ledger('orphan_flattened', { pl_dollars: plDollars, flattenAt: fills.FLATTEN });
+              return finish(resultBase({ ok:false, orphan_flattened:true, orphan_pl_dollars:plDollars,
+                note:`orphan ${filledTag} flattened @ $${fills.FLATTEN} — round-trip P/L $${plDollars}` }));
+            }
+            ledger('orphan_unresolved', { openSide: filledTag, filledAt: fills[filledTag] });
+            try { ib.cancelOrder(flatId); } catch(e) {}   // no zombies: leave nothing working
+            log(`[fly] *** ORPHAN UNRESOLVED: ${filledTag} vertical OPEN, flatten CANCELLED (no zombie) — external cleanup required ***`);
+            finish(resultBase({ ok:false, orphan_unresolved:true,
+              note:`ORPHAN UNRESOLVED — ${filledTag} vertical open; flatten cancelled, nothing left working. External cleanup required.` }));
+          }, 12000);
+        }, 14000);
+      }
+    }
+
+    function onOrderStatus(id, status, filled, remaining, avgFillPrice) {
+      const which = orderTag[id];
+      if (!which) return;                    // not ours
+      if (status === 'Filled' && fills[which] == null) {
+        fills[which] = Math.abs(avgFillPrice);   // combo fills report negative for credit structures
+        log(`[fly] ${which} vertical FILLED @ $${avgFillPrice}`);
+      }
+    }
+
+    function onErr(err, code, reqId) {
+      // only surface errors tied to OUR reqIds/orders; ignore everything else (protects directional path)
+      const mine = (reqId && (cdReqToTag[reqId] || snapReqToTag[reqId])) || (reqId && orderTag[reqId]);
+      if (!mine) return;
+      const msg = (err && err.message) ? err.message : String(err);
+      log(`[fly] error code=${code} reqId=${reqId}: ${msg}`);
+      // 201 (rejected) on our order is terminal for that leg; let the 25s timer resolve with partial state
+    }
+
+    // ---- wire handlers + kick off resolution ----
+    ib.on(EventName.contractDetails, onCD);
+    ib.on(EventName.tickPrice, onTick);
+    ib.on(EventName.tickSnapshotEnd, onSnapEnd);
+    ib.on(EventName.orderStatus, onOrderStatus);
+    ib.on(EventName.error, onErr);
+
+    for (const leg of legDefs) {
+      const reqId = reqCounter++;
+      cdReqToTag[reqId] = leg.tag;
+      ib.reqContractDetails(reqId, {
+        symbol, secType: SecType.OPT, exchange:'SMART', currency:'USD',
+        lastTradeDateOrContractMonth: expiry, strike: leg.strike, right: leg.right,
+      });
+    }
+
+    // overall safety timeout — long enough to cover orphan chase + flatten (~62s worst case)
+    setTimeout(() => finish({ ok:false, error:'overall timeout (90s) before resolution',
+      fills: { CALL: fills.CALL ?? null, PUT: fills.PUT ?? null, FLATTEN: fills.FLATTEN ?? null } }), 90000);
+  });
+}
+
+module.exports = { placeFly };

@@ -1,0 +1,506 @@
+#!/usr/bin/env node
+/**
+ * tradovate_webhook.js — VWAP Reclaim/Rejection strategy on Tradovate Demo
+ * ==========================================================================
+ *
+ * Receives signals from the VWAP reclaim engine (vwap_signal_sender.py)
+ * and executes them on the Tradovate demo account.
+ *
+ * Architecture:
+ *   vwap_signal_sender.py → POST /signal → this server → Tradovate REST API
+ *   Tradovate WebSocket  → fill/position updates → trail/stop logic
+ *
+ * Endpoints:
+ *   POST /signal   — receive VWAP signal { symbol, direction, entry, atr }
+ *   GET  /status   — current positions and P&L
+ *   GET  /health   — connection status
+ *
+ * Config (from .env):
+ *   TRADOVATE_CID          — API client ID
+ *   TRADOVATE_SECRET       — API secret
+ *   TRADOVATE_DEMO_ACCOUNT — account name e.g. DEMO7409799
+ *   TRADOVATE_PORT         — HTTP port (default 3002)
+ *
+ * Deploy:
+ *   pm2 start tradovate_webhook.js --name tradovate-webhook
+ */
+
+'use strict';
+require('dotenv').config();
+const { execSync } = require('child_process');
+const NTFY_TOPIC_ALERTS = process.env.NTFY_TOPIC || '';
+function ntfyPush(title, body, priority = 'default', tags = 'chart_with_upwards_trend') {
+  if (!NTFY_TOPIC_ALERTS) return;
+  try {
+    const safe = body.replace(/"/g, "'");
+    execSync(
+      `curl -s -H "Title: ${title}" -H "Priority: ${priority}" -H "Tags: ${tags}" -d "${safe}" https://ntfy.sh/${NTFY_TOPIC_ALERTS}`,
+      { timeout: 10000 }
+    );
+  } catch (e) { /* non-fatal, don't let notification failures break trading */ }
+}
+const http       = require('http');
+const https      = require('https');
+const WebSocket  = require('ws');
+const fs         = require('fs');
+const path       = require('path');
+
+// ── Config ──────────────────────────────────────────────────────────────────
+const CFG = {
+  cid:         process.env.TRADOVATE_CID,
+  secret:      process.env.TRADOVATE_SECRET,
+  username:    process.env.TRADOVATE_USERNAME,
+  password:    process.env.TRADOVATE_PASSWORD,
+  deviceId:    process.env.TRADOVATE_DEVICE_ID,
+  account:     process.env.TRADOVATE_DEMO_ACCOUNT || 'DEMO7409799',
+  port:        parseInt(process.env.TRADOVATE_PORT || '3002', 10),
+  baseUrl:     'https://demo.tradovateapi.com/v1',
+  wsUrl:       'wss://demo.tradovateapi.com/v1/websocket',
+  logFile:     path.join(__dirname, 'tradovate_log.jsonl'),
+  appId:       'VWAP Reclaim Futures Bot',
+  appVersion:  '1.0.0',
+};
+
+// ── Exit parameters (matching the backtest best params) ──────────────────────
+const ARM_POINTS   = 1.0;
+const TRAIL_POINTS = 0.75;
+const STOP_MULT    = 7.0;
+
+// Per-instrument overrides (validated Jul 19 2026 — see memory)
+const STOP_MULT_OVERRIDE = { MES: 6.0 };
+const TRAIL_POINTS_OVERRIDE = { MES: 0.25 };
+
+function getStopMult(symbol) {
+  const root = symbol.slice(0, 3);
+  return STOP_MULT_OVERRIDE[root] ?? STOP_MULT;
+}
+
+function getTrailPoints(symbol) {
+  const root = symbol.slice(0, 3);
+  return TRAIL_POINTS_OVERRIDE[root] ?? TRAIL_POINTS;
+}
+const MAX_BARS     = 24;    // 24 × 5min = 120 min max hold
+const BAR_SECONDS  = 300;   // 5-minute bars
+
+// ── State ────────────────────────────────────────────────────────────────────
+let accessToken   = null;
+let tokenExpiry   = 0;
+let accountId     = null;   // numeric account ID
+let ws            = null;
+let wsConnected   = false;
+let positions     = {};     // posKey → position state
+let reconnectTimer = null;
+
+// ── Logging ──────────────────────────────────────────────────────────────────
+function log(event, data = {}) {
+  const entry = { ts: new Date().toISOString(), event, ...data };
+  console.log(JSON.stringify(entry));
+  fs.appendFileSync(CFG.logFile, JSON.stringify(entry) + '\n');
+}
+
+// ── REST helper ──────────────────────────────────────────────────────────────
+function tvPost(endpoint, body, token) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify(body);
+    const url     = new URL(CFG.baseUrl + endpoint);
+    const opts = {
+      hostname: url.hostname,
+      path:     url.pathname,
+      method:   'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    };
+    const req = https.request(opts, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { resolve(data); }
+      });
+    });
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+function tvGet(endpoint, token) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(CFG.baseUrl + endpoint);
+    const opts = {
+      hostname: url.hostname,
+      // BUG FIX: url.pathname alone drops the query string entirely --
+      // every GET call through this function (findContract's ?name=...,
+      // getquote's ?symbol=...) was silently being sent with NO query
+      // parameters at all. Must include url.search to actually send them.
+      path:     url.pathname + url.search,
+      method:   'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    };
+    const req = https.request(opts, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { resolve(data); }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+// ── Authentication ────────────────────────────────────────────────────────────
+async function authenticate() {
+  if (accessToken && Date.now() < tokenExpiry - 60000) return accessToken;
+  log('auth_attempt');
+  const res = await tvPost('/auth/accesstokenrequest', {
+    name:       CFG.username || CFG.account,
+    password:   CFG.password,
+    appId:      CFG.appId,
+    appVersion: CFG.appVersion,
+    cid:        parseInt(CFG.cid, 10),
+    sec:        CFG.secret,
+    deviceId:   CFG.deviceId,
+  });
+  if (!res.accessToken) {
+    log('auth_failed', { res });
+    throw new Error('Auth failed: ' + JSON.stringify(res));
+  }
+  accessToken = res.accessToken;
+  tokenExpiry = Date.now() + (res.expirationTime
+    ? new Date(res.expirationTime).getTime() - Date.now()
+    : 3600000);
+  log('auth_ok', { expiresIn: Math.round((tokenExpiry - Date.now()) / 1000) + 's' });
+  return accessToken;
+}
+
+// ── Account resolution ────────────────────────────────────────────────────────
+async function resolveAccount() {
+  if (accountId) return accountId;
+  const token = await authenticate();
+  const accounts = await tvGet('/account/list', token);
+  const acct = accounts.find(a =>
+    a.name === CFG.account || String(a.id) === CFG.account
+  );
+  if (!acct) throw new Error(`Account ${CFG.account} not found`);
+  accountId = acct.id;
+  log('account_resolved', { accountId, name: acct.name, balance: acct.cashBalance });
+  return accountId;
+}
+
+// ── Contract lookup ───────────────────────────────────────────────────────────
+async function findContract(symbol) {
+  const token = await authenticate();
+
+  // Tradable September 2026 contracts.
+  // Continuous symbols such as @MES can be queried but cannot be traded.
+  const activeContracts = {
+    MES: 'MESU6',
+    MNQ: 'MNQU6',
+    MYM: 'MYMU6',
+  };
+
+  const root = String(symbol).replace('@', '').toUpperCase();
+  const lookupSymbol = activeContracts[root] || symbol;
+
+  const res = await tvGet(
+    `/contract/find?name=${encodeURIComponent(lookupSymbol)}`, token
+  );
+
+  if (!res || !res.id) {
+    throw new Error(
+      `Contract not found: ${symbol} (looked up as ${lookupSymbol})`
+    );
+  }
+
+  return res;
+}
+
+// ── Order placement ────────────────────────────────────────────────────────────
+async function placeOrder(symbol, action, qty = 1) {
+  const token   = await authenticate();
+  const acctId  = await resolveAccount();
+  const contract = await findContract(symbol);
+
+  const body = {
+    accountSpec:   CFG.account,
+    accountId:     acctId,
+    action:        action,           // 'Buy' or 'Sell'
+    symbol:        contract.name,
+    orderQty:      qty,
+    orderType:     'Market',
+    isAutomated:   true,
+    contractId:    contract.id,
+  };
+
+  const res = await tvPost('/order/placeorder', body, token);
+  log('order_placed', { symbol, action, qty, orderId: res.orderId, res });
+  return res;
+}
+
+// ── Position management ────────────────────────────────────────────────────────
+function posKey(symbol, direction) {
+  return `${symbol}_${direction}`;
+}
+
+function openPosition(symbol, direction, entryPrice, atrAtEntry, signalTs) {
+  const key  = posKey(symbol, direction);
+  const stopMult = getStopMult(symbol);
+  const stop = direction === 'long'
+    ? entryPrice - stopMult * atrAtEntry
+    : entryPrice + stopMult * atrAtEntry;
+
+  positions[key] = {
+    symbol, direction, entryPrice, atrAtEntry,
+    stopPrice: stop,
+    armed:     false,
+    peak:      entryPrice,
+    trailLine: null,
+    barsHeld:  0,
+    signalTs,
+    openTs:    Date.now(),
+  };
+  log('position_opened', { key, entryPrice, stopPrice: stop });
+  ntfyPush(
+    `ENTRY: ${symbol} ${direction.toUpperCase()}`,
+    `Entry: ${entryPrice}\nStop: ${stop.toFixed(2)}\nATR: ${atrAtEntry.toFixed(2)}`,
+    'default', 'chart_with_upwards_trend'
+  );
+}
+
+async function closePosition(key, exitReason, currentPrice) {
+  const pos = positions[key];
+  if (!pos) return;
+  const action = pos.direction === 'long' ? 'Sell' : 'Buy';
+  try {
+    await placeOrder(pos.symbol, action, 1);
+  } catch (e) {
+    log('close_order_error', { key, error: e.message });
+  }
+  const pnlPts = pos.direction === 'long'
+    ? currentPrice - pos.entryPrice
+    : pos.entryPrice - currentPrice;
+  log('position_closed', {
+    key, exitReason, entryPrice: pos.entryPrice,
+    exitPrice: currentPrice, pnlPts: pnlPts.toFixed(2),
+    armed: pos.armed, barsHeld: pos.barsHeld,
+  });
+  const pnlIsWin = pnlPts > 0;
+  ntfyPush(
+    `${pnlIsWin ? 'WIN' : 'LOSS'}: ${pos.symbol} ${pos.direction.toUpperCase()} (${exitReason})`,
+    `Entry: ${pos.entryPrice}\nExit: ${currentPrice}\nP&L: ${pnlPts.toFixed(2)} pts\nBars held: ${pos.barsHeld}\nArmed: ${pos.armed}`,
+    pnlIsWin ? 'default' : 'high',
+    pnlIsWin ? 'white_check_mark' : 'rotating_light'
+  );
+  delete positions[key];
+}
+
+// ── Price monitoring (polls every 5s between bar closes) ──────────────────────
+async function checkPositions() {
+  if (Object.keys(positions).length === 0) return;
+  const token = await authenticate();
+  // Get current quotes for all held symbols
+  const syms = [...new Set(Object.values(positions).map(p => p.symbol))];
+  for (const sym of syms) {
+    try {
+      const contract = await findContract(sym);
+      const quote = await tvGet(
+        `/md/getquote?symbol=${encodeURIComponent(contract.name)}`,
+        token
+      );
+      if (!quote || !quote.price) continue;
+      const price = quote.price;
+
+      for (const [key, pos] of Object.entries(positions)) {
+        if (pos.symbol !== sym) continue;
+        const hi = price, lo = price; // best available without tick stream
+
+        // Hard stop
+        if (pos.direction === 'long' && lo <= pos.stopPrice) {
+          await closePosition(key, 'stop', pos.stopPrice);
+          continue;
+        }
+        if (pos.direction === 'short' && hi >= pos.stopPrice) {
+          await closePosition(key, 'stop', pos.stopPrice);
+          continue;
+        }
+
+        // Arm check
+        if (!pos.armed) {
+          const gain = pos.direction === 'long'
+            ? price - pos.entryPrice
+            : pos.entryPrice - price;
+          if (gain >= ARM_POINTS) {
+            pos.armed = true;
+            pos.peak  = price;
+            log('position_armed', { key, price, gain: gain.toFixed(2) });
+          }
+        }
+
+        // Trail check
+        if (pos.armed) {
+          if (pos.direction === 'long') {
+            pos.peak     = Math.max(pos.peak, price);
+            pos.trailLine = pos.peak - getTrailPoints(pos.symbol);
+            if (lo <= pos.trailLine) {
+              await closePosition(key, 'trail', pos.trailLine);
+            }
+          } else {
+            pos.peak     = Math.min(pos.peak, price);
+            pos.trailLine = pos.peak + getTrailPoints(pos.symbol);
+            if (hi >= pos.trailLine) {
+              await closePosition(key, 'trail', pos.trailLine);
+            }
+          }
+        }
+
+        // Timestop — count bars
+        const barsOpen = Math.floor((Date.now() - pos.openTs) / (BAR_SECONDS * 1000));
+        pos.barsHeld = barsOpen;
+        if (!pos.armed && barsOpen >= MAX_BARS) {
+          await closePosition(key, 'timestop', price);
+        }
+      }
+    } catch (e) {
+      log('check_positions_error', { sym, error: e.message });
+    }
+  }
+}
+
+// ── HTTP Server ───────────────────────────────────────────────────────────────
+const server = http.createServer(async (req, res) => {
+  const send = (code, body) => {
+    res.writeHead(code, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(body));
+  };
+
+  if (req.method === 'GET' && req.url === '/health') {
+    return send(200, {
+      ok: true, accountId, positions: Object.keys(positions).length,
+      token: !!accessToken,
+    });
+  }
+
+  if (req.method === 'GET' && req.url === '/status') {
+    return send(200, { positions });
+  }
+
+  if (req.method === 'POST' && req.url === '/signal') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const sig = JSON.parse(body);
+
+        const expectedSecret = process.env.TRADINGVIEW_WEBHOOK_SECRET || '';
+        if (!expectedSecret) {
+          log('signal_rejected_no_server_secret');
+          return send(503, { ok: false, error: 'Webhook secret is not configured' });
+        }
+
+        if (sig.secret !== expectedSecret) {
+          log('signal_rejected_bad_secret', {
+            remote: req.socket && req.socket.remoteAddress
+          });
+          return send(401, { ok: false, error: 'Unauthorized' });
+        }
+
+        const requestedAction = String(sig.action || '').toUpperCase();
+
+        // Harmless end-to-end connectivity test. No broker order is sent.
+        if (requestedAction === 'TEST') {
+          log('test_signal_received', {
+            strategy: sig.strategy || null,
+            symbol: sig.symbol || null,
+            source: 'tradingview'
+          });
+          return send(200, {
+            ok: true,
+            test: true,
+            brokerOrderPlaced: false,
+            account: CFG.account,
+            message: 'TradingView webhook path is working'
+          });
+        }
+
+        // Preserve compatibility with the existing Python sender while also
+        // accepting the new TradingView ENTER_LONG / ENTER_SHORT format.
+        let symbol = sig.symbol;
+        let direction = sig.direction;
+        let entry_price = Number(sig.entry_price ?? sig.price);
+        let atr_at_entry = Number(sig.atr_at_entry ?? sig.atr ?? 1);
+        let signal_type = sig.signal_type || sig.reason || requestedAction;
+
+        if (requestedAction === 'ENTER_LONG') direction = 'long';
+        if (requestedAction === 'ENTER_SHORT') direction = 'short';
+
+        if (!symbol || !['long', 'short'].includes(direction) ||
+            !Number.isFinite(entry_price) || entry_price <= 0) {
+          return send(400, {
+            ok: false,
+            error: 'Invalid entry payload',
+            expectedActions: ['TEST', 'ENTER_LONG', 'ENTER_SHORT']
+          });
+        }
+
+        const requestedQty = Number.parseInt(sig.qty ?? 1, 10);
+        const qty = Number.isInteger(requestedQty) &&
+                    requestedQty >= 1 &&
+                    requestedQty <= 5 ? requestedQty : 1;
+
+        const key = posKey(symbol, direction);
+        if (positions[key]) {
+          log('signal_skipped_busy', { key });
+          return send(200, { ok: false, reason: 'position already open' });
+        }
+
+        // Place the entry order
+        const action = direction === 'long' ? 'Buy' : 'Sell';
+        const order  = await placeOrder(symbol, action, qty);
+
+        // BUG FIX: only record an open position if the broker actually
+        // confirmed the fill. Previously this ran unconditionally, so a
+        // rejected order (e.g. the "Access is denied" case) still created
+        // internal position-tracking state for a position that was never
+        // actually opened -- a phantom position the exit-management logic
+        // would then try to manage against a real broker state that didn't
+        // exist.
+        const orderFailed = !order || !order.orderId || order.failureReason;
+        if (orderFailed) {
+          log('signal_order_rejected', { symbol, direction, signal_type, entry_price, order });
+          return send(200, { ok: false, reason: 'order rejected by broker', order });
+        }
+
+        openPosition(symbol, direction, entry_price, atr_at_entry, new Date().toISOString());
+
+        log('signal_accepted', { symbol, direction, signal_type, entry_price, atr_at_entry });
+        return send(200, { ok: true, orderId: order.orderId });
+      } catch (e) {
+        log('signal_error', { error: e.message });
+        return send(500, { error: e.message });
+      }
+    });
+    return;
+  }
+
+  send(404, { error: 'Not found' });
+});
+
+// ── Position monitor interval ─────────────────────────────────────────────────
+setInterval(checkPositions, 5000);
+
+// ── Startup ───────────────────────────────────────────────────────────────────
+server.listen(CFG.port, async () => {
+  log('server_start', { port: CFG.port, account: CFG.account });
+  try {
+    await authenticate();
+    await resolveAccount();
+    log('ready', { accountId });
+  } catch (e) {
+    log('startup_error', { error: e.message });
+  }
+});

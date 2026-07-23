@@ -1,0 +1,63 @@
+
+Loaded MES: 211,137 bars 2023-07-18 20:00:00-04:00 through 2026-07-17 16:55:00-04:00
+  server_current        :  1751 signals
+  pine_current_proxy    :  1858 signals
+  et_daily_reset        :  1714 signals
+  chicago_daily_reset   :  1789 signals
+
+Loaded MNQ: 211,137 bars 2023-07-18 20:00:00-04:00 through 2026-07-17 16:55:00-04:00
+  server_current        :  1638 signals
+  pine_current_proxy    :  1728 signals
+  et_daily_reset        :  1605 signals
+  chicago_daily_reset   :  1663 signals
+
+Loaded MYM: 210,566 bars 2023-07-18 20:00:00-04:00 through 2026-07-17 16:55:00-04:00
+  server_current        :  1692 signals
+  pine_current_proxy    :  1690 signals
+  et_daily_reset        :  1642 signals
+  chicago_daily_reset   :  1618 signals
+
+=============================================================================================================================
+VWAP VARIANT PERFORMANCE
+=============================================================================================================================
+            variant symbol  trades win_rate_pct net_usd avg_trade_usd profit_factor max_drawdown_usd  long_trades  short_trades
+ pine_current_proxy    ALL    5276         80.3 $89,859        $17.03          6.48            $-607         2163          3113
+     server_current    ALL    5081         81.4 $88,670        $17.45          6.85            $-765         2129          2952
+chicago_daily_reset    ALL    5070         80.9 $88,616        $17.48          6.54            $-607         2072          2998
+     et_daily_reset    ALL    4961         81.8 $87,911        $17.72          6.88            $-765         2081          2880
+ pine_current_proxy    MES    1858         84.6 $21,806        $11.74          3.47            $-304          746          1112
+     server_current    MES    1751         86.1 $21,757        $12.43          3.69            $-306          710          1041
+     et_daily_reset    MES    1714         86.3 $21,587        $12.59          3.71            $-306          695          1019
+chicago_daily_reset    MES    1789         84.7 $21,516        $12.03          3.50            $-304          714          1075
+ pine_current_proxy    MNQ    1728         85.7 $51,999        $30.09         11.90            $-390          679          1049
+chicago_daily_reset    MNQ    1663         86.1 $51,098        $30.73         11.89            $-390          656          1007
+     server_current    MNQ    1638         86.7 $50,723        $30.97         12.35            $-390          665           973
+     et_daily_reset    MNQ    1605         87.0 $50,225        $31.29         12.38            $-390          648           957
+     server_current    MYM    1692         71.4 $16,191         $9.57          7.19            $-158          754           938
+     et_daily_reset    MYM    1642         72.1 $16,099         $9.80          7.26            $-158          738           904
+ pine_current_proxy    MYM    1690         69.9 $16,054         $9.50          6.70            $-164          738           952
+chicago_daily_reset    MYM    1618         71.4 $16,003         $9.89          6.94            $-164          702           916
+
+====================================================================================================
+SIGNAL OVERLAP VERSUS CURRENT SERVER
+====================================================================================================
+  variant_vs_server  server_signals  variant_signals  shared_signals  server_only  variant_only jaccard_pct
+chicago_daily_reset            5081             5070            3886         1195          1184        62.0
+     et_daily_reset            5081             4961            4961          120             0        97.6
+ pine_current_proxy            5081             5276            3908         1173          1368        60.6
+     server_current            5081             5081            5081            0             0       100.0
+
+====================================================================================================
+ALL-SYMBOL RANKING
+====================================================================================================
+            variant symbol  trades win_rate_pct net_usd avg_trade_usd profit_factor max_drawdown_usd  long_trades  short_trades
+     et_daily_reset    ALL    4961         81.8 $87,911        $17.72          6.88            $-765         2081          2880
+     server_current    ALL    5081         81.4 $88,670        $17.45          6.85            $-765         2129          2952
+chicago_daily_reset    ALL    5070         80.9 $88,616        $17.48          6.54            $-607         2072          2998
+ pine_current_proxy    ALL    5276         80.3 $89,859        $17.03          6.48            $-607         2163          3113
+
+Saved:
+  vwap_variant_trade_results.csv
+  vwap_variant_summary.csv
+  vwap_variant_signal_overlap.csv
+  vwap_variant_yearly.csv

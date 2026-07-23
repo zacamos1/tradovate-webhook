@@ -1,0 +1,244 @@
+[trading_day 2026-07-06T08:38:01.210Z] 2026-07-06 (Mon) — trading day: proceed
+
+WING SWEEP  2026-07-06  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    748.17  1.5%   748     577      523
+SPY    748.17  2.0%   748     620      880
+SPY    748.17  2.5%   748     635     1265
+XSP    748.32  1.5%   748     577      523
+XSP    748.32  2.0%   748     621      879
+XSP    748.32  2.5%   748     635     1265
+IWM    297.98  2.0%   298     282      318
+IWM    297.98  2.5%   298     290      410
+IWM    297.98  3.0%   298     297      603
+QQQ	(no spot — skipped)
+------------------------------------------------------------
+Logged 9 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-07T13:38:01.368Z] 2026-07-07 (Tue) — trading day: proceed
+
+WING SWEEP  2026-07-07  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    749.67  1.5%   750     578      522
+SPY    749.67  2.0%   750     622      878
+SPY    749.67  2.5%   750     636     1264
+XSP    752.07  1.5%   752     579      521
+XSP    752.07  2.0%   752     623      877
+XSP    752.07  2.5%   752     638     1262
+IWM    299.22  2.0%   299     283      317
+IWM    299.22  2.5%   299     292      408
+IWM    299.22  3.0%   299     299      601
+QQQ	(no spot — skipped)
+------------------------------------------------------------
+Logged 9 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-08T13:38:01.958Z] 2026-07-08 (Wed) — trading day: proceed
+
+WING SWEEP  2026-07-08  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    743.33  1.5%   743     575      525
+SPY    743.33  2.0%   743     617      883
+SPY    743.33  2.5%   743     631     1269
+XSP    745.96  1.5%   746     576      524
+XSP    745.96  2.0%   746     619      881
+XSP    745.96  2.5%   746     633     1267
+IWM    294.78  2.0%   295     280      320
+IWM    294.78  2.5%   295     288      412
+IWM    294.78  3.0%   295     295      605
+QQQ	(no spot — skipped)
+------------------------------------------------------------
+Logged 9 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-09T13:38:01.633Z] 2026-07-09 (Thu) — trading day: proceed
+
+WING SWEEP  2026-07-09  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    747.25  1.5%   747     576      524
+SPY    747.25  2.0%   747     620      880
+SPY    747.25  2.5%   747     634     1266
+XSP    750.72  1.5%   751     579      521
+XSP    750.72  2.0%   751     623      877
+XSP    750.72  2.5%   751     637     1263
+IWM    295.48  2.0%   295     282      318
+IWM    295.48  2.5%   295     290      410
+IWM    295.48  3.0%   295     297      603
+QQQ	(no spot — skipped)
+------------------------------------------------------------
+Logged 9 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-10T13:38:01.839Z] 2026-07-10 (Fri) — trading day: proceed
+
+WING SWEEP  2026-07-10  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    752.64  1.5%   753     580      520
+SPY    752.64  2.0%   753     624      876
+SPY    752.64  2.5%   753     639     1261
+XSP    755.56  1.5%   756     582      518
+XSP    755.56  2.0%   756     626      874
+XSP    755.56  2.5%   756     642     1258
+IWM    296.50  2.0%   297     283      317
+IWM    296.50  2.5%   297     292      408
+IWM    296.50  3.0%   297     299      601
+QQQ	(no spot — skipped)
+------------------------------------------------------------
+Logged 9 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-13T13:38:01.883Z] 2026-07-13 (Mon) — trading day: proceed
+
+WING SWEEP  2026-07-13  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    753.07  1.5%   753     579      521
+SPY    753.07  2.0%   753     624      876
+SPY    753.07  2.5%   753     638     1262
+XSP    755.70  1.5%   756     581      519
+XSP    755.70  2.0%   756     626      874
+XSP    755.70  2.5%   756     641     1259
+IWM    295.65  2.0%   296     282      318
+IWM    295.65  2.5%   296     290      410
+IWM    295.65  3.0%   296     297      603
+QQQ    716.30  2.0%   716     721      679
+QQQ    716.30  2.5%   716     765     1035
+QQQ    716.30  3.0%   716     780     1320
+------------------------------------------------------------
+Logged 12 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-14T13:38:02.002Z] 2026-07-14 (Tue) — trading day: proceed
+
+WING SWEEP  2026-07-14  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    749.61  1.5%   750     578      522
+SPY    749.61  2.0%   750     622      878
+SPY    749.61  2.5%   750     637     1263
+XSP    753.18  1.5%   753     580      520
+XSP    753.18  2.0%   753     624      876
+XSP    753.18  2.5%   753     639     1261
+IWM    294.65  2.0%   295     281      319
+IWM    294.65  2.5%   295     289      411
+IWM    294.65  3.0%   295     296      604
+QQQ    717.36  2.0%   717     722      678
+QQQ    717.36  2.5%   717     766     1034
+QQQ    717.36  3.0%   717     784     1416
+------------------------------------------------------------
+Logged 12 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-15T13:38:01.292Z] 2026-07-15 (Wed) — trading day: proceed
+
+WING SWEEP  2026-07-15  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    755.19  1.5%   755     581      519
+SPY    755.19  2.0%   755     625      875
+SPY    755.19  2.5%   755     640     1260
+XSP    757.65  1.5%   758     582      518
+XSP    757.65  2.0%   758     628      872
+XSP    757.65  2.5%   758     643     1257
+IWM    295.69  2.0%   296     281      319
+IWM    295.69  2.5%   296     290      410
+IWM    295.69  3.0%   296     296      604
+QQQ    723.94  2.0%   724     726      674
+QQQ    723.94  2.5%   724     771     1029
+QQQ    723.94  3.0%   724     791     1409
+------------------------------------------------------------
+Logged 12 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-16T13:38:01.416Z] 2026-07-16 (Thu) — trading day: proceed
+
+WING SWEEP  2026-07-16  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    752.31  1.5%   752     579      521
+SPY    752.31  2.0%   752     623      877
+SPY    752.31  2.5%   752     638     1262
+XSP    754.77  1.5%   755     581      519
+XSP    754.77  2.0%   755     625      875
+XSP    754.77  2.5%   755     640     1260
+IWM    295.79  2.0%   296     281      319
+IWM    295.79  2.5%   296     289      411
+IWM    295.79  3.0%   296     296      604
+QQQ    711.13  2.0%   711     717      683
+QQQ    711.13  2.5%   711     760     1040
+QQQ    711.13  3.0%   711     775     1325
+------------------------------------------------------------
+Logged 12 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-17T13:38:01.220Z] 2026-07-17 (Fri) — trading day: proceed
+
+WING SWEEP  2026-07-17  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    741.02  1.5%   741     573      527
+SPY    741.02  2.0%   741     615      885
+SPY    741.02  2.5%   741     629     1271
+XSP    744.56  1.5%   745     576      524
+XSP    744.56  2.0%   745     619      881
+XSP    744.56  2.5%   745     633     1267
+IWM    292.22  2.0%   292     278      322
+IWM    292.22  2.5%   292     286      414
+IWM    292.22  3.0%   292     292      608
+QQQ    690.12  2.0%   690     702      698
+QQQ    690.12  2.5%   690     734      966
+QQQ    690.12  3.0%   690     754     1346
+------------------------------------------------------------
+Logged 12 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-20T13:38:01.508Z] 2026-07-20 (Mon) — trading day: proceed
+
+WING SWEEP  2026-07-20  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    747.79  1.5%   748     577      523
+SPY    747.79  2.0%   748     620      880
+SPY    747.79  2.5%   748     635     1265
+XSP    751.16  1.5%   751     578      522
+XSP    751.16  2.0%   751     622      878
+XSP    751.16  2.5%   751     637     1263
+IWM    295.05  2.0%   295     280      320
+IWM    295.05  2.5%   295     288      412
+IWM    295.05  3.0%   295     295      605
+QQQ    704.44  2.0%   704     713      687
+QQQ    704.44  2.5%   704     754     1046
+QQQ    704.44  3.0%   704     768     1332
+------------------------------------------------------------
+Logged 12 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-21T13:38:01.185Z] 2026-07-21 (Tue) — trading day: proceed
+
+WING SWEEP  2026-07-21  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY    745.43  1.5%   745     576      524
+SPY    745.43  2.0%   745     619      881
+SPY    745.43  2.5%   745     633     1267
+XSP    748.16  1.5%   748     577      523
+XSP    748.16  2.0%   748     620      880
+XSP    748.16  2.5%   748     635     1265
+IWM    294.44  2.0%   294     281      319
+IWM    294.44  2.5%   294     289      411
+IWM    294.44  3.0%   294     296      604
+QQQ    704.66  2.0%   705     713      687
+QQQ    704.66  2.5%   705     755     1045
+QQQ    704.66  3.0%   705     769     1331
+------------------------------------------------------------
+Logged 12 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).
+[trading_day 2026-07-22T13:38:01.534Z] 2026-07-22 (Wed) — trading day: proceed
+
+WING SWEEP  2026-07-22  (1 contract)
+sym   spot     wing%  center  credit  maxloss
+------------------------------------------------------------
+SPY	(no spot — skipped)
+XSP    749.31  1.5%   749     578      522
+XSP    749.31  2.0%   749     621      879
+XSP    749.31  2.5%   749     636     1264
+IWM	(no spot — skipped)
+QQQ	(no spot — skipped)
+------------------------------------------------------------
+Logged 3 wingsweep rows to /root/ibkr-webhook/pmtracker_multi_log.jsonl
+Settler scores these at 15:20 (variant:"wingsweep", grouped by wing_pct).

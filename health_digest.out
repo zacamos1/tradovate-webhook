@@ -1,0 +1,125 @@
+[2026-07-13T13:58:01.154Z] FLY SYSTEM: 1 ISSUE
+🔴 HONESTY RATIO LOW: 0.52
+ℹ️ honesty ratio avg 0.523 (2 flies)
+ℹ️ autotest: disclosure incomplete (0/2) — standing down
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (29 rows)
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-13T20:35:01.873Z] fly system eod: all green
+ℹ️ settler: 29 rows graded
+ℹ️ ledger: fly_20260713_SPY_f829 riding
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (29 rows)
+✅ flatten clean
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-14T13:58:01.147Z] FLY SYSTEM: 2 ISSUES
+🔴 NO CREDIT VERIFICATION TODAY (verify-credits ran?)
+🔴 AUTOTEST DID NOT RUN
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (29 rows)
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-14T20:35:01.554Z] FLY SYSTEM: 1 ISSUE
+🔴 LEDGER: fly_20260714_XSP_face UNRESOLVED
+ℹ️ settler: 34 rows graded
+ℹ️ live book (vol_wide XSP+IWM): $1611
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (34 rows)
+✅ flatten clean
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-15T13:58:01.502Z] FLY SYSTEM: 1 ISSUE
+🔴 NO CREDIT VERIFICATION TODAY (verify-credits ran?)
+ℹ️ autotest: disclosure incomplete (0/2) — standing down
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (34 rows)
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-15T20:35:01.683Z] fly system eod: all green
+ℹ️ settler: 34 rows graded
+ℹ️ live book (vol_wide XSP+IWM): $1544
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (34 rows)
+✅ flatten clean
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-16T13:58:01.257Z] FLY SYSTEM: 1 ISSUE
+🔴 HONESTY RATIO LOW: 0.65
+ℹ️ honesty ratio avg 0.645 (2 flies)
+ℹ️ autotest: disclosure incomplete (0/2) — standing down
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (34 rows)
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-16T20:35:01.807Z] fly system eod: all green
+ℹ️ settler: 34 rows graded
+ℹ️ live book (vol_wide XSP+IWM): $1110
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (34 rows)
+✅ flatten clean
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-17T13:58:02.024Z] FLY SYSTEM: 2 ISSUES
+🔴 HONESTY RATIO LOW: 0.67
+🔴 AUTOTEST DID NOT RUN
+ℹ️ honesty ratio avg 0.670 (5 flies)
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (34 rows)
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-17T20:35:01.313Z] fly system eod: all green
+ℹ️ settler: 34 rows graded
+ℹ️ live book (vol_wide XSP+IWM): $1474
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (34 rows)
+✅ flatten clean
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-20T13:58:01.459Z] FLY SYSTEM: 2 ISSUES
+🔴 HONESTY RATIO LOW: 0.53
+🔴 AUTOTEST DID NOT RUN
+ℹ️ honesty ratio avg 0.528 (2 flies)
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (34 rows)
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-20T20:35:01.916Z] fly system eod: all green
+ℹ️ settler: 34 rows graded
+ℹ️ live book (vol_wide XSP+IWM): $478
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (34 rows)
+✅ flatten clean
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-21T13:58:01.122Z] FLY SYSTEM: 1 ISSUE
+🔴 NO CREDIT VERIFICATION TODAY (verify-credits ran?)
+ℹ️ autotest ran, no terminal line yet
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (34 rows)
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-21T20:35:01.899Z] fly system eod: all green
+ℹ️ settler: 34 rows graded
+ℹ️ live book (vol_wide XSP+IWM): $818
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (34 rows)
+✅ flatten clean
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-22T13:58:02.061Z] FLY SYSTEM: 1 ISSUE
+🔴 NO CREDIT VERIFICATION TODAY (verify-credits ran?)
+ℹ️ autotest: disclosure incomplete (0/2) — standing down
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (12 rows)
+pushed to ntfy topic: zfly-x7k2m9q4
+[2026-07-22T20:35:01.753Z] fly system eod: all green
+ℹ️ settler: 12 rows graded
+ℹ️ live book (vol_wide XSP+IWM): $1229
+✅ gateway port up
+✅ webhook connected
+✅ feeds ok (12 rows)
+✅ flatten clean
+pushed to ntfy topic: zfly-x7k2m9q4

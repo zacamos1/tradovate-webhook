@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+  <title>VWAP Futures Operations Console</title>
+  <link rel="stylesheet" href="/dashboard/styles.css">
+</head>
+
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">AUTOMATED FUTURES TRADING</div>
+        <h1>VWAP Operations Console</h1>
+      </div>
+
+      <div class="top-status">
+        <span id="overallDot" class="status-dot unknown"></span>
+        <div>
+          <strong id="overallStatus">Loading</strong>
+          <small id="lastUpdated">Waiting for server</small>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero-grid">
+        <article class="card confidence-card">
+          <div class="card-heading">
+            <div>
+              <div class="section-label">ENGINE CONFIDENCE</div>
+              <h2 id="confidenceScore">--%</h2>
+            </div>
+
+            <div class="confidence-ring">
+              <div id="confidenceRingValue">--</div>
+            </div>
+          </div>
+
+          <div id="confidenceChecks" class="check-list"></div>
+        </article>
+
+        <article class="card engine-card">
+          <div class="section-label">ENGINE STATUS</div>
+
+          <div class="metric-grid">
+            <div class="metric">
+              <span>Tradovate</span>
+              <strong id="brokerStatus">--</strong>
+            </div>
+
+            <div class="metric">
+              <span>Authentication</span>
+              <strong id="authStatus">--</strong>
+            </div>
+
+            <div class="metric">
+              <span>Reconciliation</span>
+              <strong id="reconcileStatus">--</strong>
+            </div>
+
+            <div class="metric">
+              <span>Safety Lock</span>
+              <strong id="safetyLock">--</strong>
+            </div>
+
+            <div class="metric">
+              <span>Trading</span>
+              <strong id="tradingStatus">--</strong>
+            </div>
+
+            <div class="metric">
+              <span>Uptime</span>
+              <strong id="uptime">--</strong>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="summary-grid">
+        <article class="summary-card">
+          <span>Account</span>
+          <strong id="accountName">--</strong>
+          <small id="accountId">--</small>
+        </article>
+
+        <article class="summary-card">
+          <span>Today's Trades</span>
+          <strong id="dailyTrades">0</strong>
+          <small id="dailyTradeLimit">Limit --</small>
+        </article>
+
+        <article class="summary-card">
+          <span>Today's Exits</span>
+          <strong id="dailyExits">0</strong>
+          <small>Completed positions</small>
+        </article>
+
+        <article class="summary-card">
+          <span>Estimated P&amp;L</span>
+          <strong id="dailyPnl">$0.00</strong>
+          <small>Based on reference prices</small>
+        </article>
+
+        <article class="summary-card">
+          <span>Open Positions</span>
+          <strong id="positionCount">0</strong>
+          <small id="brokerPositionCount">Broker: 0</small>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="card positions-card">
+          <div class="card-title-row">
+            <div>
+              <div class="section-label">OPEN POSITIONS</div>
+              <h3>Position Monitor</h3>
+            </div>
+
+            <span id="positionBadge" class="badge neutral">
+              No positions
+            </span>
+          </div>
+
+          <div id="positionsContainer" class="positions-container">
+            <div class="empty-state">
+              No open positions.
+            </div>
+          </div>
+        </article>
+
+        <article class="card controls-card">
+          <div class="section-label">ENGINE CONTROLS</div>
+          <h3>Risk Controls</h3>
+
+          <div class="control-buttons">
+            <button
+              id="pauseButton"
+              class="button warning"
+              data-action="PAUSE"
+            >
+              Pause Trading
+            </button>
+
+            <button
+              id="resumeButton"
+              class="button success"
+              data-action="RESUME"
+            >
+              Resume Trading
+            </button>
+
+            <button
+              id="disableEntriesButton"
+              class="button danger"
+              data-action="DISABLE_ENTRIES"
+            >
+              Disable Entries
+            </button>
+
+            <button
+              id="enableEntriesButton"
+              class="button success"
+              data-action="ENABLE_ENTRIES"
+            >
+              Enable Entries
+            </button>
+
+            <button
+              id="reconcileButton"
+              class="button primary"
+            >
+              Reconcile Now
+            </button>
+
+            <button
+              id="refreshButton"
+              class="button secondary"
+            >
+              Refresh Dashboard
+            </button>
+          </div>
+
+          <div id="controlMessage" class="control-message">
+            Controls require the dashboard admin token.
+          </div>
+
+          <div class="risk-box">
+            <div>
+              <span>Maximum contracts</span>
+              <strong id="maxContracts">--</strong>
+            </div>
+
+            <div>
+              <span>Maximum daily trades</span>
+              <strong id="maxDailyTrades">--</strong>
+            </div>
+
+            <div>
+              <span>Last reconciliation</span>
+              <strong id="lastReconciliation">--</strong>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="card signal-card">
+        <div class="card-title-row">
+          <div>
+            <div class="section-label">SIGNAL PIPELINE</div>
+            <h3>Last Signal and Order</h3>
+          </div>
+        </div>
+
+        <div class="signal-grid">
+          <div class="signal-panel">
+            <span class="signal-heading">Last signal</span>
+            <div id="lastSignal" class="json-preview">
+              No signal received.
+            </div>
+          </div>
+
+          <div class="signal-panel">
+            <span class="signal-heading">Last order</span>
+            <div id="lastOrder" class="json-preview">
+              No order submitted.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card events-card">
+        <div class="card-title-row">
+          <div>
+            <div class="section-label">ACTIVITY FEED</div>
+            <h3>Recent Engine Events</h3>
+          </div>
+
+          <div class="feed-controls">
+            <label>
+              <input id="autoRefreshToggle" type="checkbox" checked>
+              Auto-refresh
+            </label>
+
+            <button
+              id="clearVisualFeed"
+              class="text-button"
+              type="button"
+            >
+              Clear view
+            </button>
+          </div>
+        </div>
+
+        <div id="eventFeed" class="event-feed">
+          <div class="empty-state">Loading events…</div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>VWAP Futures Engine</span>
+      <span id="footerState">Connecting…</span>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/dashboard/app.js"></script>
+</body>
+</html>

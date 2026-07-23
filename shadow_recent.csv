@@ -1,0 +1,2 @@
+signal_ts_et,date,time_et,symbol,side,score,underlying_close,fire_rank,c_trend,c_vwap_evt,c_or_evt,c_squeeze,c_rsi,c_vol,engine
+2026-07-17T12:00:00-04:00,2026-07-17,12:00,IWM,C,45,294.39,1,True,True,False,False,False,False,scout

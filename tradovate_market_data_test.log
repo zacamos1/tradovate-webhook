@@ -1,0 +1,54 @@
+
+================================================================================
+TESTING MESU6
+================================================================================
+[test] Got market data access token, length 399
+[test] Greeting: o
+[test] Auth response: a[{"s":200,"i":1}]
+[test] Frame received: a[{"s":200,"i":2,"d":{"errorText":"Symbol is inaccessible","errorCode":"UnknownSymbol","mode":"None"}}]
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Total bars collected: 0
+[test] No bars returned for MESU6.
+
+================================================================================
+TESTING MNQU6
+================================================================================
+[test] Got market data access token, length 399
+[test] Greeting: o
+[test] Auth response: a[{"s":200,"i":1}]
+[test] Frame received: a[{"s":200,"i":2,"d":{"errorText":"Symbol is inaccessible","errorCode":"UnknownSymbol","mode":"None"}}]
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Total bars collected: 0
+[test] No bars returned for MNQU6.
+
+================================================================================
+TESTING MYMU6
+================================================================================
+[test] Got market data access token, length 401
+[test] Greeting: o
+[test] Auth response: a[{"s":200,"i":1}]
+[test] Frame received: a[{"s":200,"i":2,"d":{"errorText":"Symbol is inaccessible","errorCode":"UnknownSymbol","mode":"None"}}]
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Frame received: h
+[test] Total bars collected: 0
+[test] No bars returned for MYMU6.

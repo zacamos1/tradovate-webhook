@@ -1,0 +1,758 @@
+require('dotenv').config();
+const express = require('express');
+const { IBApi, EventName, OrderAction, OrderType, SecType } = require('@stoqey/ib');
+
+const PORT = process.env.WEBHOOK_PORT || 3000;
+const TWS_HOST = process.env.TWS_HOST || '127.0.0.1';
+const TWS_PORT = parseInt(process.env.TWS_PORT) || 7496;
+const ACCOUNT = process.env.IB_ACCOUNT || 'DUN460366';
+const DTE_MIN = process.env.DTE_MIN !== undefined ? parseInt(process.env.DTE_MIN) : 3;
+const DTE_MAX = process.env.DTE_MAX !== undefined ? parseInt(process.env.DTE_MAX) : 5;
+const TP_PCT = parseFloat(process.env.TP_PERCENT) || 25;
+const SL_PCT = parseFloat(process.env.SL_PERCENT) || 50;
+
+// --- exit-feature config (new) ---
+const EOD_FLATTEN_ENABLED = process.env.EOD_FLATTEN_ENABLED === 'true';
+const EOD_FLATTEN_HHMM = parseInt(process.env.EOD_FLATTEN_HHMM) || 1550;  // 15:50 ET
+const TRAIL_ENABLED = process.env.TRAIL_ENABLED === 'true';
+const TRAIL_ARM_PCT = parseFloat(process.env.TRAIL_ARM_PCT) || 50;
+const TIME_STOP_ENABLED = process.env.TIME_STOP_ENABLED === 'true';
+const TIME_STOP_MIN = parseFloat(process.env.TIME_STOP_MIN) || 25;
+const LOG_MFE_ENABLED = process.env.LOG_MFE_ENABLED === 'true';
+const TRAIL_DISTANCE_PCT = parseFloat(process.env.TRAIL_DISTANCE_PCT) || 20;
+// --- arm off the underlying (entitled equity feed) instead of option premium ---
+const USE_UNDERLYING_ARM = process.env.USE_UNDERLYING_ARM !== 'false';        // default ON
+const ARM_UNDERLYING_PCT = parseFloat(process.env.ARM_UNDERLYING_PCT) || 0.30; // favorable underlying move %, tunable
+
+const app = express();
+app.use(express.json());
+
+let ib, connected = false, orderId = 1;
+
+// --- STAGE 3: premium fly execution (isolated module, gated test endpoint) ---
+const { placeFly } = require('./fly_exec');
+const FLY_TEST_ENABLED = process.env.FLY_TEST_ENABLED === 'true';
+function nextFlyOrderId() { return orderId++; }
+const pendingBrackets = {};
+const openPositions = {};   // (new) what we currently hold, for the trailing stop
+const pendingExitFills = {};  // orderId -> pending exit fill info, awaiting execDetails confirmation
+const deferredSignals = [];  // signals that arrived while disconnected, retried once TWS reconnects
+const DEFERRED_SIGNAL_MAX_AGE_MS = 5 * 60 * 1000;  // drop anything older than 5 min once reconnected -- stale price data isn't worth acting on
+const _fsLog = require('fs');
+const _lastBarSignals = {};  // posKey-ish -> {time, dir} for same-bar straddle detection
+// Fail-safe MFE logger. Never throws into the trade path.
+function logExit(p, reason, exitPriceApprox) {
+  try {
+    if (!LOG_MFE_ENABLED || !p) return;
+    const entry = p.fillPrice;
+    const peak = p.peak || entry;
+    const mfePct = entry ? +(((peak/entry)-1)*100).toFixed(1) : null;
+    const exitPx = (exitPriceApprox && exitPriceApprox > 0) ? exitPriceApprox : null;
+    const pnlPctApprox = (exitPx && entry) ? +(((exitPx/entry)-1)*100).toFixed(1) : null;
+    const now = Date.now();
+    const minsHeld = p.entryTime ? +(((now-p.entryTime)/60000)).toFixed(1) : null;
+    const minsToPeak = (p.entryTime && p.peakTime) ? +(((p.peakTime-p.entryTime)/60000)).toFixed(1) : null;
+    const c = p.contract || {};
+    const rec = {
+      ts: new Date(now).toISOString(),
+      symbol: c.symbol, right: c.right, strike: c.strike, expiry: c.lastTradeDateOrContractMonth,
+      entryPrice: entry, exitPriceApprox: exitPx, reason,
+      pnlPctApprox, peakPrice: peak, mfePct, armed: !!p.armed,
+      minsToPeak, minsHeld, qty: p.qty, straddle: !!p.straddle,
+      score: p.score ?? null,
+      entryUnderlying: p.entryUnderlying ?? null,
+      peakUnderlying: p.peakUnderlying ?? null,
+      underlyingMfePct: (p.entryUnderlying && p.peakUnderlying)
+        ? +((((p.contract||{}).right === 'C')
+              ? (p.peakUnderlying/p.entryUnderlying - 1)
+              : (p.entryUnderlying/p.peakUnderlying - 1)) * 100).toFixed(2)
+        : null
+    };
+    _fsLog.appendFileSync('mfe.jsonl', JSON.stringify(rec) + '\n');
+  } catch (e) { try { log('logExit error (non-fatal): ' + e.message); } catch(_){} }
+}
+const signalQueue = [];
+let processing = false;
+
+const fs = require('fs');
+function log(msg) { const line = `[${new Date().toISOString()}] ${msg}`; console.log(line); fs.appendFileSync(require('path').join(__dirname, 'trades.log'), line + '\n'); }
+
+// --- ET time helpers (new) ---
+function todayYYYYMMDD_ET() {
+  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  return `${et.getFullYear()}${String(et.getMonth()+1).padStart(2,'0')}${String(et.getDate()).padStart(2,'0')}`;
+}
+function nowHHMM_ET() {
+  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  return et.getHours()*100 + et.getMinutes();
+}
+
+let reconnectTimer = null;
+function scheduleReconnect(why) {
+  if (reconnectTimer) return;                       // single-flight
+  log(`TWS unavailable (${why}) — retrying in 15s`);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    try { connect(); } catch (e) { log('reconnect error: ' + e.message); scheduleReconnect('retry threw'); }
+  }, 15000);
+}
+
+function connect() {
+  ib = new IBApi({ host: TWS_HOST, port: TWS_PORT, clientId: Math.floor(Math.random()*9000)+1000 });
+  ib.on(EventName.connected, () => {
+    connected = true;
+    log('Connected to TWS');
+    ib.reqIds(1);
+    if (deferredSignals.length > 0) {
+      const now = Date.now();
+      const fresh = deferredSignals.filter(s => now - s.queuedAt <= DEFERRED_SIGNAL_MAX_AGE_MS);
+      const stale = deferredSignals.length - fresh.length;
+      deferredSignals.length = 0;
+      if (stale > 0) log(`Dropped ${stale} deferred signal(s) — too stale (>${DEFERRED_SIGNAL_MAX_AGE_MS/60000}min old) to act on`);
+      if (fresh.length > 0) {
+        log(`Reconnected — replaying ${fresh.length} deferred signal(s)`);
+        for (const s of fresh) {
+          signalQueue.push(s.payload);
+        }
+        if (!processing) processQueue();
+      }
+    }
+  });
+  ib.on(EventName.nextValidId, (id) => { orderId = id; });
+  ib.on(EventName.error, (err, code) => {
+    if (![2104,2106,2158,2119].includes(code)) log(`IBKR [${code}]: ${err?.message||err}`);
+    if (code === 502 && !connected) scheduleReconnect('connect refused (502) — gateway not ready');
+  });
+  ib.on(EventName.disconnected, () => {
+    connected = false;
+    scheduleReconnect('connection dropped');
+  });
+
+  ib.on(EventName.execDetails, (reqId, contract, execution) => {
+    log(`[execDetails] side=${execution.side} orderId=${execution.orderId} qty=${execution.shares} px=${execution.price}`);
+    if (execution.side === 'SLD') {
+      const pe = pendingExitFills[execution.orderId];
+      if (pe) {
+        delete pendingExitFills[execution.orderId];
+        // The completed trade ledger contains one row using the
+        // actual IBKR execution price.
+        logExit(pe.p, pe.reason, execution.price);
+      }
+      // prune stale entries (fills that never came back) after 30 min
+      const _cutoff = Date.now() - 30 * 60 * 1000;
+      for (const k in pendingExitFills) { if (pendingExitFills[k].ts < _cutoff) delete pendingExitFills[k]; }
+      return;
+    }
+    if (execution.side !== 'BOT') return;
+    const pending = pendingBrackets[execution.orderId];
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    delete pendingBrackets[execution.orderId];
+
+    const fillPrice = execution.price;
+    const { contract: con, qty, tpId, slId, ocaGroup, tpPct, slPct, underlyingConId, entryUnderlying, score } = pending;
+    const minTick = fillPrice < 3 ? 0.05 : 0.10;
+    const tpPrice = (Math.round(fillPrice*(1+tpPct/100)/minTick)*minTick).toFixed(2);
+    const slPriceRaw = Math.max(fillPrice*(1-slPct/100), minTick);
+    const slPrice = (Math.round(slPriceRaw/minTick)*minTick).toFixed(2);
+
+    log(`Fill @ $${fillPrice} → TP:$${tpPrice} SL:$${slPrice}`);
+
+    ib.placeOrder(tpId, con, {
+      action: OrderAction.SELL, orderType: OrderType.LMT,
+      totalQuantity: qty, lmtPrice: parseFloat(tpPrice),
+      account: ACCOUNT, tif: 'GTC', ocaGroup, ocaType: 1, transmit: true
+    });
+    ib.placeOrder(slId, con, {
+      action: OrderAction.SELL, orderType: OrderType.STP,
+      totalQuantity: qty, auxPrice: parseFloat(slPrice),
+      account: ACCOUNT, tif: 'GTC', ocaGroup, ocaType: 1, transmit: true
+    });
+
+    // --- track this position for the trailing stop (new) ---
+    if (TRAIL_ENABLED) {
+      const posKey = `${con.symbol}_${con.right}_${con.strike}_${con.lastTradeDateOrContractMonth}`;
+      openPositions[posKey] = {
+        contract: con, qty, fillPrice,
+        tpId, slId, ocaGroup,
+        peak: fillPrice,   // highest premium seen so far
+        armed: false,      // becomes true once arm threshold reached
+        entryTime: Date.now(),  // for the time-stop
+        closing: false,    // guard so we only fire the exit once
+        underlyingConId, entryUnderlying,   // arm/MFE off the entitled underlying feed
+        peakUnderlying: entryUnderlying,    // best favorable underlying level seen
+        score: score ?? null,               // fired score from the TV alert payload
+        underlyingReqId: null
+      };
+      log(`Tracking ${posKey} for trailing stop (entry $${fillPrice}, underlying ${entryUnderlying ?? 'n/a'})`);
+    }
+  });
+
+  // --- trailing-stop price updates (new) ---
+  ib.on(EventName.tickPrice, (reqId, field, price) => {
+    // --- underlying feed (entitled): arm off the underlying move, track underlying MFE ---
+    const armKey = armMktData[reqId];
+    if (armKey) {
+      const pa = openPositions[armKey];
+      if (!pa || pa.closing) return;
+      if (![4, 2, 1].includes(field)) return;   // 4 LAST, 2 ASK, 1 BID
+      if (!price || price <= 0 || !pa.entryUnderlying) return;
+      const isCall = (pa.contract || {}).right === 'C';
+      if (isCall ? price > pa.peakUnderlying : price < pa.peakUnderlying) pa.peakUnderlying = price;
+      const movePct = isCall
+        ? (price / pa.entryUnderlying - 1) * 100
+        : (pa.entryUnderlying / price - 1) * 100;
+      if (USE_UNDERLYING_ARM && !pa.armed && movePct >= ARM_UNDERLYING_PCT) {
+        pa.armed = true;
+        log(`Trail ARMED ${armKey} on underlying ${isCall ? '+' : '-'}${movePct.toFixed(2)}% (px ${price}, entry ${pa.entryUnderlying})`);
+      }
+      return;
+    }
+
+    const posKey = trailMktData[reqId];
+    if (!posKey) return;
+    const p = openPositions[posKey];
+    if (!p || p.closing) return;
+    // Use BID only for option tracking and trail decisions.
+    // BID represents the price currently available to a seller.
+    // LAST may be stale and ASK is not executable when selling.
+    if (field !== 1) return;  // 1 = BID
+    if (!price || price <= 0) return;
+
+    if (price > p.peak) { p.peak = price; p.peakTime = Date.now(); }
+    p.lastPrice = price;   // current executable bid
+    const gainPct = (price / p.fillPrice - 1) * 100;
+
+    // Arming is driven by the underlying feed above when USE_UNDERLYING_ARM is on.
+    // Fall back to option-premium arming only when it is explicitly disabled.
+    if (!USE_UNDERLYING_ARM && !p.armed && gainPct >= TRAIL_ARM_PCT) {
+      p.armed = true;
+      log(`Trail ARMED ${posKey} at +${gainPct.toFixed(0)}% premium (peak $${p.peak})`);
+    }
+    if (!p.armed) return;
+
+    const trailLine = p.peak * (1 - TRAIL_DISTANCE_PCT/100);
+    if (price <= trailLine) {
+      p.closing = true;
+      log(`Trail HIT ${posKey}: $${price} <= trail $${trailLine.toFixed(2)} (peak $${p.peak}) — closing`);
+      try { ib.cancelOrder(p.tpId); } catch(e){}
+      try { ib.cancelOrder(p.slId); } catch(e){}
+      const sellId = orderId++;
+      // Save the position before submitting so execDetails can record
+      // the actual IBKR fill rather than the theoretical trigger quote.
+      pendingExitFills[sellId] = {
+        p: Object.assign({}, p),
+        reason: 'trail',
+        ts: Date.now()
+      };
+      ib.placeOrder(sellId, p.contract, {
+        action: OrderAction.SELL, orderType: OrderType.MKT,
+        totalQuantity: p.qty, account: ACCOUNT, transmit: true
+      });
+      try { ib.cancelMktData(p.trailReqId); } catch(e){}
+      delete trailMktData[p.trailReqId];
+      try { ib.cancelMktData(p.underlyingReqId); } catch(e){}
+      if (p.underlyingReqId) delete armMktData[p.underlyingReqId];
+      delete openPositions[posKey];
+    }
+  });
+
+  ib.connect();
+}
+
+function pickExpiration(exps) {
+  const today = new Date();
+  for (let i = DTE_MIN; i <= DTE_MAX; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    const s = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+    if (exps.includes(s)) return s;
+  }
+  // No exact match within DTE_MIN..DTE_MAX -- skip the trade instead of
+  // reaching for the nearest available date (that fallback sent MSFT/NVDA to July today).
+  return null;
+}
+
+function getConId(symbol) {
+  return new Promise((resolve, reject) => {
+    const reqId = Math.floor(Math.random() * 8000) + 1000;
+    const timeout = setTimeout(() => reject(new Error('ConId timeout')), 8000);
+    const handler = (rId, details) => {
+      if (rId !== reqId) return;
+      ib.removeListener(EventName.contractDetails, handler);
+      ib.removeListener(EventName.contractDetailsEnd, endHandler);
+      clearTimeout(timeout);
+      resolve(details.contract.conId);
+    };
+    const endHandler = (rId) => {
+      if (rId !== reqId) return;
+      log(`getConId: contractDetailsEnd for reqId ${reqId}, symbol ${symbol} - no match`);
+    };
+    ib.on(EventName.contractDetails, handler);
+    ib.on(EventName.contractDetailsEnd, endHandler);
+    log(`getConId: requesting contract details for ${symbol}, reqId ${reqId}`);
+    try {
+      ib.reqContractDetails(reqId, { symbol, secType: SecType.STK, exchange: 'SMART', currency: 'USD' });
+    } catch (e) {
+      log(`getConId: reqContractDetails threw: ${e.message}`);
+      reject(e);
+    }
+  });
+}
+
+function getExpirations(symbol, conId) {
+  return new Promise((resolve, reject) => {
+    const reqId = Math.floor(Math.random() * 8000) + 1000;
+    let merged = [];
+    const timeout = setTimeout(() => { ib.removeListener(EventName.securityDefinitionOptionParameter, handler); resolve(merged); }, 8000);
+    const handler = (rId, exchange, undConId, tradingClass, multiplier, expirations) => {
+      if (rId !== reqId) return;
+      if (tradingClass !== symbol) {
+        log(`getExpirations: skipping alternate trading class "${tradingClass}" for ${symbol}`);
+        return;
+      }
+      ib.removeListener(EventName.securityDefinitionOptionParameter, handler);
+      clearTimeout(timeout);
+      resolve([...expirations]);
+    };
+    ib.on(EventName.securityDefinitionOptionParameter, handler);
+    ib.reqSecDefOptParams(reqId, symbol, '', SecType.STK, conId);
+  });
+}
+
+// ============================================================
+// EOD-FLATTEN (new) — queries LIVE IBKR positions, closes only
+// options expiring today. Multi-day big-8 positions roll untouched.
+// ============================================================
+let eodFlattenedOn = null;  // YYYYMMDD we last flattened (run once/day)
+
+function flattenZeroDTE() {
+  const today = todayYYYYMMDD_ET();
+  const positions = [];
+
+  const onPos = (account, contract, pos, avgCost) => {
+    if (account !== ACCOUNT) return;
+    if (contract.secType !== 'OPT') return;
+    if (contract.lastTradeDateOrContractMonth !== today) return;
+    if (pos <= 0) return;  // we only buy-to-open; skip flat/short
+    try {   // never touch premium-book (fly) legs — they ride to cash settlement
+      const flyLegs = JSON.parse(require('fs').readFileSync(require('path').join(__dirname,'fly_legs_today.json'),'utf8'));
+      if (flyLegs && Array.isArray(flyLegs.conIds) && flyLegs.conIds.includes(contract.conId)) {
+        log(`EOD-flatten: skipping FLY LEG conId ${contract.conId} (${contract.symbol} ${contract.right} ${contract.strike})`);
+        return;
+      }
+    } catch(e) {}
+    positions.push({ contract, pos });
+  };
+
+  const onEnd = () => {
+    ib.removeListener(EventName.position, onPos);
+    ib.removeListener(EventName.positionEnd, onEnd);
+    ib.cancelPositions();
+
+    if (positions.length === 0) {
+      log(`EOD-flatten: no 0DTE option positions to close (exp ${today})`);
+      return;
+    }
+    log(`EOD-flatten: closing ${positions.length} position(s) expiring ${today}`);
+    for (const { contract, pos } of positions) {
+      const posKey = `${contract.symbol}_${contract.right}_${contract.strike}_${contract.lastTradeDateOrContractMonth}`;
+      const tracked = openPositions[posKey];
+      if (tracked) {
+        try { ib.cancelOrder(tracked.tpId); } catch(e){}
+        try { ib.cancelOrder(tracked.slId); } catch(e){}
+        if (tracked.trailReqId) { try { ib.cancelMktData(tracked.trailReqId); } catch(e){} delete trailMktData[tracked.trailReqId]; }
+        if (tracked.underlyingReqId) { try { ib.cancelMktData(tracked.underlyingReqId); } catch(e){} delete armMktData[tracked.underlyingReqId]; }
+        tracked.closing = true;
+        logExit(tracked, 'eod', tracked.lastPrice || tracked.peak);
+        delete openPositions[posKey];
+      }
+      const sellId = orderId++;
+      // positions() contracts come back with exchange:'' — placeOrder rejects them (err 321).
+      // Rebuild minimal contract from conId with SMART routing.
+      const closeContract = {
+        conId: contract.conId,
+        symbol: contract.symbol,
+        secType: contract.secType,
+        exchange: 'SMART',
+        currency: contract.currency || 'USD',
+      };
+      ib.placeOrder(sellId, closeContract, {
+        action: OrderAction.SELL, orderType: OrderType.MKT,
+        totalQuantity: pos, account: ACCOUNT, transmit: true
+      });
+      log(`EOD-flatten SELL: ${contract.symbol} ${contract.right} ${contract.strike} qty ${pos}`);
+    }
+  };
+
+  ib.on(EventName.position, onPos);
+  ib.on(EventName.positionEnd, onEnd);
+  ib.reqPositions();
+}
+
+if (EOD_FLATTEN_ENABLED) {
+  setInterval(() => {
+    if (!connected) return;
+    const today = todayYYYYMMDD_ET();
+    // PASS 2 catch-all: re-run 7 min after pass 1. Re-queries positions, so it
+    // only touches what pass 1 failed to close. Never fires at/after 16:00.
+    if (eodFlattenedOn === today && flattenZeroDTE._p2 !== today
+        && Number(nowHHMM_ET()) >= Number(EOD_FLATTEN_HHMM) + 7
+        && Number(nowHHMM_ET()) < 1600) {
+      flattenZeroDTE._p2 = today;
+      log(`EOD-flatten PASS 2 (catch-all) at ${nowHHMM_ET()} ET`);
+      flattenZeroDTE();
+    }
+    if (eodFlattenedOn === today) return;
+    if (nowHHMM_ET() >= EOD_FLATTEN_HHMM && Number(nowHHMM_ET()) < 1601) {
+      eodFlattenedOn = today;
+      log(`EOD-flatten trigger at ${nowHHMM_ET()} ET`);
+      flattenZeroDTE();
+    }
+  }, 30000);
+}
+
+// ============================================================
+// TRAILING STOP (new) — server-side monitoring (A1: alongside static TP)
+// Subscribes market data per open position; the tickPrice handler in
+// connect() tracks peak / arms / fires. This interval just manages subs.
+// ============================================================
+const trailMktData = {};  // reqId -> posKey  (option feed)
+const armMktData = {};    // reqId -> posKey  (underlying feed, for arming + MFE)
+
+if (TRAIL_ENABLED) {
+  setInterval(() => {
+    if (!connected) return;
+    for (const posKey of Object.keys(openPositions)) {
+      const p = openPositions[posKey];
+      if (p.closing) continue;
+
+      // underlying feed (entitled) — arming + underlying-MFE
+      if (USE_UNDERLYING_ARM && !p.underlyingReqId && p.underlyingConId) {
+        const uReqId = Math.floor(Math.random()*8000)+20000;
+        p.underlyingReqId = uReqId;
+        armMktData[uReqId] = posKey;
+        ib.reqMktData(uReqId, {
+          conId: p.underlyingConId, symbol: p.contract.symbol,
+          secType: SecType.STK, exchange: 'SMART', currency: 'USD'
+        }, '', false, false);
+      }
+
+      // option feed (may be delayed/unentitled) — peak premium + trail-distance trigger
+      if (!p.trailReqId) {
+        const reqId = Math.floor(Math.random()*8000)+2000;
+        p.trailReqId = reqId;
+        trailMktData[reqId] = posKey;
+        ib.reqMktData(reqId, p.contract, '', false, false);
+      }
+    }
+  }, 5000);
+}
+
+// ============================================================
+// TIME-STOP — closes un-armed positions after TIME_STOP_MIN minutes.
+// Fires on elapsed time alone (price-independent), closes at market,
+// reuses the SAME cleanup sequence the trail uses (no orphaned orders).
+// ============================================================
+if (TIME_STOP_ENABLED) {
+  setInterval(() => {
+    if (!connected) return;
+    const now = Date.now();
+    for (const posKey of Object.keys(openPositions)) {
+      const p = openPositions[posKey];
+      if (p.closing) continue;
+      if (p.armed) continue;  // armed positions belong to the trail, not the time-stop
+      const minsOpen = (now - p.entryTime) / 60000;
+      if (minsOpen < TIME_STOP_MIN) continue;
+      p.closing = true;
+      log(`Time-stop HIT ${posKey}: un-armed after ${minsOpen.toFixed(1)}min — closing at market`);
+      try { ib.cancelOrder(p.tpId); } catch(e){}
+      try { ib.cancelOrder(p.slId); } catch(e){}
+      const sellId = orderId++;
+      // Register before submitting to avoid missing a very fast fill.
+      pendingExitFills[sellId] = {
+        p: Object.assign({}, p),
+        reason: 'timestop',
+        ts: Date.now()
+      };
+      ib.placeOrder(sellId, p.contract, {
+        action: OrderAction.SELL, orderType: OrderType.MKT,
+        totalQuantity: p.qty, account: ACCOUNT, transmit: true
+      });
+      try { ib.cancelMktData(p.trailReqId); } catch(e){}
+      delete trailMktData[p.trailReqId];
+      try { ib.cancelMktData(p.underlyingReqId); } catch(e){}
+      if (p.underlyingReqId) delete armMktData[p.underlyingReqId];
+      delete openPositions[posKey];
+    }
+  }, 5000);
+}
+
+async function processSignal(payload) {
+  const right = payload.optionType?.toLowerCase() === 'put' ? 'P' : 'C';
+  const qty = payload.quantity || 1;
+  const ticker = payload.ticker;
+
+  // --- POSITION-AWARENESS GUARD: one position per TICKER at a time (any strike/right) ---
+  // Blocks duplicate stacking AND long-straddle (put+call same ticker). Re-entry after
+  // a position fully closes is fine (it leaves openPositions, so the guard passes again).
+  // Must check BOTH: openPositions (already filled) AND pendingBrackets (order in flight,
+  // not yet filled) -- otherwise two signals arriving before the first fills both pass.
+  for (const k of Object.keys(openPositions)) {
+    if (openPositions[k]?.contract?.symbol === ticker) {
+      log(`SKIP: already holding ${ticker} (${k}) -- one position per ticker`);
+      return;
+    }
+  }
+  for (const id of Object.keys(pendingBrackets)) {
+    if (pendingBrackets[id]?.contract?.symbol === ticker) {
+      log(`SKIP: ${ticker} order already in flight (parentId ${id}) -- one position per ticker`);
+      return;
+    }
+  }
+  // --- end guard ---
+
+  try {
+    log(`Processing ${ticker} ${right}...`);
+    const conId = await getConId(ticker);
+    log(`ConId for ${ticker}: ${conId}`);
+    const exps = await getExpirations(ticker, conId);
+    const exp = pickExpiration(exps);
+    if (!exp) { log(`No valid expiration for ${ticker}`); return; }
+
+    const entryUnderlying = parseFloat(payload.price);   // entitled-feed arm baseline
+    const strike = Math.round(entryUnderlying / 5) * 5;
+    const contract = {
+      symbol: ticker, secType: SecType.OPT, exchange: 'SMART',
+      currency: 'USD', lastTradeDateOrContractMonth: exp,
+      strike, right, multiplier: '100'
+    };
+
+    const baseId = orderId; orderId += 3;
+    const parentId = baseId, tpId = baseId+1, slId = baseId+2;
+    const ocaGroup = `OCA_${parentId}_${Date.now()}`;
+
+    const tpPct = payload.takeProfit?.percent;
+    if (tpPct === undefined) {
+      log(`SKIP: ${ticker} alert missing takeProfit.percent -- no order placed`);
+      return;
+    }
+    const slPct = 90;  // wide catastrophe stop, all short-DTE
+
+    pendingBrackets[parentId] = {
+      contract, qty, tpId, slId, ocaGroup, parentId, tpPct, slPct,
+      score: Number.isFinite(parseFloat(payload.score)) ? parseFloat(payload.score) : null,
+      underlyingConId: conId, entryUnderlying,   // carried into the fill handler for underlying-arm
+      timeout: setTimeout(() => { log(`No fill for ${parentId} after 30s`); delete pendingBrackets[parentId]; }, 30000)
+    };
+
+    ib.placeOrder(parentId, contract, {
+      action: OrderAction.BUY, orderType: OrderType.MKT,
+      totalQuantity: qty, account: ACCOUNT, transmit: true
+    });
+
+    log(`Order placed: ${ticker} ${right} strike:${strike} exp:${exp}`);
+
+    // Wait 3s for fill before processing next signal
+    await new Promise(r => setTimeout(r, 3000));
+
+  } catch(err) {
+    log(`Error processing ${ticker}: ${err.message}`);
+  }
+}
+
+async function processQueue() {
+  if (signalQueue.length === 0) { processing = false; return; }
+  processing = true;
+  const next = signalQueue.shift();
+  await processSignal(next);
+  processQueue();
+}
+
+app.post('/futures', (req, res) => {
+  // Proxy futures signals to futures_webhook.js on port 3001
+  // ParadoxAlgo sends to /futures; we forward to the dedicated futures process
+  const http = require('http');
+  let body = '';
+  req.on('data', chunk => { body += chunk; });
+  req.on('end', () => {
+    const options = {
+      hostname: '127.0.0.1',
+      port: 3001,
+      path: '/webhook',
+      method: 'POST',
+      headers: {
+        'Content-Type': req.headers['content-type'] || 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...(req.headers['x-webhook-secret'] ? { 'x-webhook-secret': req.headers['x-webhook-secret'] } : {}),
+      },
+    };
+    const proxy = http.request(options, (pRes) => {
+      let data = '';
+      pRes.on('data', chunk => { data += chunk; });
+      pRes.on('end', () => {
+        try { res.status(pRes.statusCode).json(JSON.parse(data)); }
+        catch (e) { res.status(pRes.statusCode).send(data); }
+      });
+    });
+    proxy.on('error', (err) => {
+      log('futures proxy error: ' + err.message);
+      res.status(502).json({ error: 'futures webhook unavailable', detail: err.message });
+    });
+    proxy.write(body);
+    proxy.end();
+  });
+});
+
+
+app.post('/tradovate', (req, res) => {
+  // Public TradingView endpoint -> dedicated Tradovate executor on port 3002
+  const http = require('http');
+  const body = JSON.stringify(req.body || {});
+
+  const options = {
+    hostname: '127.0.0.1',
+    port: 3002,
+    path: '/signal',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+    },
+  };
+
+  const proxy = http.request(options, (pRes) => {
+    let data = '';
+    pRes.on('data', chunk => { data += chunk; });
+    pRes.on('end', () => {
+      try {
+        res.status(pRes.statusCode || 200).json(JSON.parse(data));
+      } catch {
+        res.status(pRes.statusCode || 200).send(data);
+      }
+    });
+  });
+
+  proxy.on('error', (err) => {
+    log('tradovate proxy error: ' + err.message);
+    res.status(502).json({
+      ok: false,
+      error: 'Tradovate executor unavailable',
+      detail: err.message,
+    });
+  });
+
+  proxy.write(body);
+  proxy.end();
+});
+
+app.post('/webhook', (req, res) => {
+  const payload = req.body;
+  log(`Signal received: ${payload.action} ${payload.ticker} ${payload.optionType} @ ${payload.price}`);
+  res.json({ status: 'received', ticker: payload.ticker });
+
+  if (payload.action !== 'buy') { log(`Skipped: action is ${payload.action}`); return; }
+
+  if (!connected) {
+    deferredSignals.push({ payload, queuedAt: Date.now() });
+    log(`DEFERRED (not connected to TWS): ${payload.ticker} — will replay on reconnect if still fresh (${deferredSignals.length} pending)`);
+    return;
+  }
+
+  signalQueue.push(payload);
+  log(`Queued ${payload.ticker} — queue length: ${signalQueue.length}`);
+  if (!processing) processQueue();
+});
+
+app.get('/dashboard', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  const file = path.join(__dirname, 'directional_dashboards', 'latest.html');
+  if (fs.existsSync(file)) {
+    res.sendFile(file);
+  } else {
+    res.status(404).send('Dashboard not generated yet -- run push_directional_dashboard.sh first.');
+  }
+});
+
+app.get('/futures-status', (req, res) => {
+  const { execSync } = require('child_process');
+  try {
+    const evals = execSync('pm2 logs vwap-sender --lines 500 --nostream 2>/dev/null | grep -c \'"event": "evaluation_done"\'').toString().trim();
+    const trades = execSync('grep -c "position_opened\\|position_closed" tradovate_log.jsonl 2>/dev/null || echo 0', { cwd: __dirname }).toString().trim();
+    res.type('text/plain').send(`Futures VWAP status\nEval cycles today: ${evals}\nTrades: ${trades}`);
+  } catch (e) {
+    res.status(500).send('Error fetching status: ' + e.message);
+  }
+});
+
+app.get('/health', (req,res) => {
+  // read-only snapshot of what the bot currently holds — served from the bot's
+  // own memory, no IBKR session involved (safe to hit any time, incl. mid-session).
+  const positions = Object.keys(openPositions).map(k => {
+    const p = openPositions[k];
+    const minsOpen = p.entryTime ? +(((Date.now()-p.entryTime)/60000).toFixed(1)) : null;
+    return {
+      key: k, entry: p.fillPrice, peak: p.peak, armed: !!p.armed,
+      minsOpen, entryUnderlying: p.entryUnderlying ?? null,
+      peakUnderlying: p.peakUnderlying ?? null, closing: !!p.closing
+    };
+  });
+  res.json({
+    tws:`${TWS_HOST}:${TWS_PORT}`, account:ACCOUNT, connected,
+    dte:`${DTE_MIN}-${DTE_MAX}`, tp:`+${TP_PCT}%`, sl:`-${SL_PCT}%`,
+    queue: signalQueue.length, eodFlatten: EOD_FLATTEN_ENABLED, trail: TRAIL_ENABLED,
+    armBasis: USE_UNDERLYING_ARM ? `underlying+${ARM_UNDERLYING_PCT}%` : `prem+${TRAIL_ARM_PCT}%`,
+    openCount: positions.length, positions
+  });
+});
+
+// --- STAGE 3: manual test endpoint for premium fly execution ---
+// POST /place_test_fly  body: { "symbol":"SPY", "center":745, "wing":6, "contracts":1 }
+// Reuses the live `ib` connection (no 10197). Inert unless FLY_TEST_ENABLED=true.
+app.post('/place_test_fly', async (req, res) => {
+  if (!FLY_TEST_ENABLED) return res.status(403).json({ ok:false, error:'disabled (set FLY_TEST_ENABLED=true)' });
+  if (!connected) return res.status(503).json({ ok:false, error:'ib not connected' });
+  const { symbol, center, wing, contracts, callCredit, putCredit } = req.body || {};
+  if (!symbol || !center || !wing) return res.status(400).json({ ok:false, error:'need symbol, center, wing' });
+  log(`[fly] /place_test_fly ${symbol} c${center} w${wing} x${contracts||1} (acct ${ACCOUNT})${callCredit!=null&&putCredit!=null?' model-priced cc='+callCredit+' pc='+putCredit:''}`);
+  try {
+    placeFly(ib, {
+      symbol, center: parseInt(center,10), wing: parseInt(wing,10),
+      contracts: parseInt(contracts,10) || 1, account: ACCOUNT, log, getOrderId: nextFlyOrderId,
+      callCredit: callCredit != null ? parseFloat(callCredit) : undefined,
+      putCredit:  putCredit  != null ? parseFloat(putCredit)  : undefined,
+    }).then((result) => {
+      if (result.ok && result.real_fill_credit != null) {
+        try {
+          const row = { ts:new Date().toISOString(), source:'place_test_fly', symbol:result.symbol,
+            center:result.center, wing:result.wing, contracts:result.contracts, expiry:result.expiry,
+            real_fill_credit:result.real_fill_credit, real_fill_dollars:result.real_fill_dollars ?? null,
+            call_credit:result.callCredit, put_credit:result.putCredit,
+            chased:result.chased ?? null, account:result.account };
+          fs.appendFileSync(require('path').join(__dirname,'fly_exec_log.jsonl'), JSON.stringify(row)+'\n');
+        } catch(e) { log('[fly] log write failed: '+e.message); }
+      }
+      if (result.orphan_flattened || result.orphan_unresolved) {
+        try {
+          const row = { ts:new Date().toISOString(), source:'place_test_fly', symbol:result.symbol,
+            center:result.center, wing:result.wing, contracts:result.contracts, expiry:result.expiry,
+            orphan_flattened:result.orphan_flattened ?? false, orphan_unresolved:result.orphan_unresolved ?? false,
+            orphan_pl_dollars:result.orphan_pl_dollars ?? null, fills:result.fills, account:result.account };
+          fs.appendFileSync(require('path').join(__dirname,'fly_exec_log.jsonl'), JSON.stringify(row)+'\n');
+        } catch(e) { log('[fly] orphan log write failed: '+e.message); }
+      }
+      log(`[fly] result: ${JSON.stringify(result)}`);
+    }).catch((e) => log('[fly] async error: '+(e && e.message ? e.message : e)));
+
+    return res.status(202).json({ ok:true, submitted:true,
+      note:'fly working async — watch pm2 logs for [fly] result (up to ~90s if orphan handling engages)' });
+  } catch (e) { log('[fly] endpoint error: '+e.message); return res.status(500).json({ ok:false, error:e.message }); }
+});
+
+connect();
+app.listen(PORT, () => {
+  log(`Server on http://localhost:${PORT}`);
+  log(`TP: +${TP_PCT}% | SL: -${SL_PCT}% | DTE: ${DTE_MIN}-${DTE_MAX}`);
+  log(`EOD-flatten: ${EOD_FLATTEN_ENABLED ? 'ON @'+EOD_FLATTEN_HHMM+' ET' : 'off'} | Trail: ${TRAIL_ENABLED ? 'ON arm '+(USE_UNDERLYING_ARM ? 'underlying+'+ARM_UNDERLYING_PCT+'%' : 'prem+'+TRAIL_ARM_PCT+'%')+' trail'+TRAIL_DISTANCE_PCT+'%' : 'off'} | Time-stop: ${TIME_STOP_ENABLED ? 'ON '+TIME_STOP_MIN+'min' : 'off'} | MFE-log: ${LOG_MFE_ENABLED ? 'ON' : 'off'}`);
+});

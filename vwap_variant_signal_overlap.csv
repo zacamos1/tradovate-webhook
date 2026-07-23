@@ -1,0 +1,5 @@
+variant_vs_server,server_signals,variant_signals,shared_signals,server_only,variant_only,jaccard_pct
+chicago_daily_reset,5081,5070,3886,1195,1184,62.027134876296884
+et_daily_reset,5081,4961,4961,120,0,97.63826018500295
+pine_current_proxy,5081,5276,3908,1173,1368,60.59854240967592
+server_current,5081,5081,5081,0,0,100.0

@@ -1,0 +1,400 @@
+
+// ── Price monitoring (polls every 5s between bar closes) ──────────────────────
+async function checkPositions() {
+  if (Object.keys(positions).length === 0) return;
+  const token = await authenticate();
+  // Get current quotes for all held symbols
+  const syms = [...new Set(Object.values(positions).map(p => p.symbol))];
+  for (const sym of syms) {
+    try {
+      const contract = await findContract(sym);
+      const quote = await tvGet(
+        `/md/getquote?symbol=${encodeURIComponent(contract.name)}`,
+        token
+      );
+      if (!quote || !quote.price) continue;
+      const price = quote.price;
+
+      for (const [key, pos] of Object.entries(positions)) {
+        if (pos.symbol !== sym) continue;
+
+        if (pos.externallyManaged === true) {
+          continue;
+        }
+
+        const hi = price, lo = price; // best available without tick stream
+
+        // Hard stop
+        if (pos.direction === 'long' && lo <= pos.stopPrice) {
+          await closePosition(key, 'stop', pos.stopPrice);
+          continue;
+        }
+        if (pos.direction === 'short' && hi >= pos.stopPrice) {
+          await closePosition(key, 'stop', pos.stopPrice);
+          continue;
+        }
+
+        // Arm check
+        if (!pos.armed) {
+          const gain = pos.direction === 'long'
+            ? price - pos.entryPrice
+            : pos.entryPrice - price;
+          if (gain >= ARM_POINTS) {
+            pos.armed = true;
+            pos.peak  = price;
+            log('position_armed', { key, price, gain: gain.toFixed(2) });
+          }
+        }
+
+        // Trail check
+        if (pos.armed) {
+          if (pos.direction === 'long') {
+            pos.peak     = Math.max(pos.peak, price);
+            pos.trailLine = pos.peak - getTrailPoints(pos.symbol);
+            if (lo <= pos.trailLine) {
+              await closePosition(key, 'trail', pos.trailLine);
+            }
+          } else {
+            pos.peak     = Math.min(pos.peak, price);
+            pos.trailLine = pos.peak + getTrailPoints(pos.symbol);
+            if (hi >= pos.trailLine) {
+              await closePosition(key, 'trail', pos.trailLine);
+            }
+          }
+        }
+
+        // Timestop — count bars
+        const barsOpen = Math.floor((Date.now() - pos.openTs) / (BAR_SECONDS * 1000));
+        pos.barsHeld = barsOpen;
+        if (!pos.armed && barsOpen >= MAX_BARS) {
+          await closePosition(key, 'timestop', price);
+        }
+      }
+    } catch (e) {
+      log('check_positions_error', { sym, error: e.message });
+    }
+  }
+
+  persistPositions();
+}
+
+function sendDashboardFile(res, filename, contentType) {
+  const filePath = path.join(CFG.dashboardDir, filename);
+
+  if (!fs.existsSync(filePath)) {
+    res.writeHead(404, {
+      'Content-Type': 'application/json'
+    });
+
+    res.end(JSON.stringify({
+      ok: false,
+      error: 'Dashboard file not found'
+    }));
+
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': contentType,
+    'Cache-Control': 'no-store'
+  });
+
+  fs.createReadStream(filePath).pipe(res);
+}
+
+function readRecentLogEvents(limit = 100) {
+  const safeLimit = Math.max(
+    1,
+    Math.min(500, Number(limit) || 100)
+  );
+
+  try {
+    if (!fs.existsSync(CFG.logFile)) {
+      return [];
+    }
+
+    const raw = fs.readFileSync(CFG.logFile, 'utf8');
+
+    const lines = raw
+      .split('\n')
+      .filter(Boolean)
+      .slice(-safeLimit)
+      .reverse();
+
+    const events = [];
+
+    for (const line of lines) {
+      try {
+        events.push(JSON.parse(line));
+      } catch (error) {
+        events.push({
+          ts: null,
+          event: 'unparsed_log_line',
+          line
+        });
+      }
+    }
+
+    return events;
+  } catch (error) {
+    log('dashboard_event_read_error', {
+      error: error.message
+    });
+
+    return [];
+  }
+}
+
+// ── HTTP Server ───────────────────────────────────────────────────────────────
+const server = http.createServer(async (req, res) => {
+  const send = (code, body) => {
+    res.writeHead(code, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(body));
+  };
+
+  const sendHtml = (code, html) => {
+    res.writeHead(code, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
+  };
+
+  const requestUrl = new URL(
+    req.url,
+    `http://${req.headers.host || 'localhost'}`
+  );
+
+  resetDailyStateIfNeeded();
+
+  if (
+    req.method === 'GET' &&
+    requestUrl.pathname === '/health'
+  ) {
+    return send(200, {
+      ok: true,
+      environment: 'demo',
+      account: CFG.account,
+      accountId,
+      authenticated:
+        !!accessToken && Date.now() < tokenExpiry,
+      paused: runtimeState.paused,
+      entriesEnabled: runtimeState.entriesEnabled,
+      positions: Object.keys(positions).length,
+      startupReady,
+      safetyLock: reconciliationState.safetyLock,
+      reconciliationHealthy:
+        !reconciliationState.lastError,
+      lastReconciliation:
+        reconciliationState.lastSuccessTs,
+      uptimeSeconds:
+        Math.floor((Date.now() - startedAt) / 1000),
+    });
+  }
+
+  if (
+    req.method === 'GET' &&
+    requestUrl.pathname === '/status'
+  ) {
+    return send(200, {
+      positions,
+      runtime: {
+        paused: runtimeState.paused,
+        entriesEnabled: runtimeState.entriesEnabled,
+        maxContracts: CFG.maxContracts,
+        maxDailyTrades: CFG.maxDailyTrades,
+        daily: runtimeState.daily,
+        lastSignal: runtimeState.lastSignal,
+        lastOrder: runtimeState.lastOrder,
+      },
+      reconciliation: {
+        startupReady,
+        safetyLock:
+          reconciliationState.safetyLock,
+        lastRunTs:
+          reconciliationState.lastRunTs,
+        lastSuccessTs:
+          reconciliationState.lastSuccessTs,
+        lastError:
+          reconciliationState.lastError,
+        mismatches:
+          reconciliationState.mismatches,
+        brokerPositions:
+          reconciliationState.brokerPositions,
+      },
+    });
+  }
+
+  if (
+    req.method === 'GET' &&
+    (
+      requestUrl.pathname === '/dashboard' ||
+      requestUrl.pathname === '/dashboard/'
+    )
+  ) {
+    if (!adminAuthorized(req, requestUrl)) {
+      return send(401, {
+        ok: false,
+        error: 'Dashboard authorization required'
+      });
+    }
+
+    return sendDashboardFile(
+      res,
+      'index.html',
+      'text/html; charset=utf-8'
+    );
+  }
+
+  if (
+    req.method === 'GET' &&
+    requestUrl.pathname === '/dashboard/styles.css'
+  ) {
+    return sendDashboardFile(
+      res,
+      'styles.css',
+      'text/css; charset=utf-8'
+    );
+  }
+
+  if (
+    req.method === 'GET' &&
+    requestUrl.pathname === '/dashboard/app.js'
+  ) {
+    return sendDashboardFile(
+      res,
+      'app.js',
+      'application/javascript; charset=utf-8'
+    );
+  }
+
+  if (
+    req.method === 'GET' &&
+    requestUrl.pathname === '/events'
+  ) {
+    if (!adminAuthorized(req, requestUrl)) {
+      return send(401, {
+        ok: false,
+        error: 'Event feed authorization required'
+      });
+    }
+
+    return send(200, {
+      ok: true,
+      events: readRecentLogEvents(
+        requestUrl.searchParams.get('limit')
+      )
+    });
+  }
+
+  if (
+    req.method === 'POST' &&
+    requestUrl.pathname === '/reconcile'
+  ) {
+    if (!adminAuthorized(req, requestUrl)) {
+      return send(401, {
+        ok: false,
+        error: 'Admin authorization required'
+      });
+    }
+
+    const reconciliation =
+      await reconcilePositions('manual_dashboard');
+
+    return send(200, {
+      ok: true,
+      reconciliation
+    });
+  }
+
+  if (
+    req.method === 'POST' &&
+    requestUrl.pathname === '/control'
+  ) {
+    if (!adminAuthorized(req, requestUrl)) {
+      return send(401, {
+        ok: false,
+        error: 'Admin authorization required'
+      });
+    }
+
+    let controlBody = '';
+
+    req.on('data', chunk => controlBody += chunk);
+
+    req.on('end', () => {
+      try {
+        const command = JSON.parse(controlBody || '{}');
+        const action =
+          String(command.action || '').toUpperCase();
+
+        if (action === 'PAUSE') {
+          runtimeState.paused = true;
+        } else if (action === 'RESUME') {
+          runtimeState.paused = false;
+        } else if (action === 'DISABLE_ENTRIES') {
+          runtimeState.entriesEnabled = false;
+        } else if (action === 'ENABLE_ENTRIES') {
+          runtimeState.entriesEnabled = true;
+        } else {
+          return send(400, {
+            ok: false,
+            error: 'Unknown control action'
+          });
+        }
+
+        log('control_action', {
+          action,
+          paused: runtimeState.paused,
+          entriesEnabled: runtimeState.entriesEnabled,
+        });
+
+        persistRuntime();
+
+        return send(200, {
+          ok: true,
+          action,
+          paused: runtimeState.paused,
+          entriesEnabled: runtimeState.entriesEnabled,
+        });
+      } catch (error) {
+        return send(400, {
+          ok: false,
+          error: 'Invalid control payload'
+        });
+      }
+    });
+
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/signal') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const sig = JSON.parse(body);
+
+        const requestedAction =
+          String(sig.action || '').toUpperCase();
+
+        const symbol =
+          String(sig.symbol || '')
+            .replace('@', '')
+            .toUpperCase();
+
+        const requestedQty =
+          Number.parseInt(sig.qty ?? 1, 10);
+
+        const qtyIsValid =
+          Number.isInteger(requestedQty) &&
+          requestedQty >= 1 &&
+          requestedQty <= CFG.maxContracts;
+
+        const qty = qtyIsValid
+          ? requestedQty
+          : null;
+
+        runtimeState.lastSignal = {
+          ts: new Date().toISOString(),
+          strategy: sig.strategy || null,
+          symbol: symbol || null,
+          action: requestedAction || null,
+          requestedQty,

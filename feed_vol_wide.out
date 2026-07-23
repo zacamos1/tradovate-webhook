@@ -1,0 +1,128 @@
+[trading_day 2026-07-09T13:42:02.013Z] 2026-07-09 (Thu) — trading day: proceed
+(^RVX unavailable — using VIX 16.71 x 1.25 = 20.89)
+VOL-SCALED-WIDE variant  2026-07-09   (WING_MULT=1.75)
+sym	open	vol	src	wings	credit	maxloss	risk	pct
+----------------------------------------------------------------------------
+XSP	749.16	16.71	^VIX	749pm14	605	795	1590	31.8%
+SPX	7491.60	16.71	^VIX	7492pm138	6037	7763	15526	310.5%
+SPY	747.26	16.71	^VIX	747pm14	604	796	1592	31.8%
+QQQ	711.44	27.86	^VXN	711pm22	957	1243	2486	49.7%
+IWM	295.22	20.89	^RVX	295pm7	299	401	802	16%
+============================================================================
+Logged 5 vol-scaled rows to pmtracker_multi_log.jsonl  (variant:"vol")
+Settler will fill real_pl on these automatically at 15:20.
+[trading_day 2026-07-10T13:42:01.078Z] 2026-07-10 (Fri) — trading day: proceed
+(^RVX unavailable — using VIX 15.73 x 1.25 = 19.66)
+VOL-SCALED-WIDE variant  2026-07-10   (WING_MULT=1.75)
+sym	open	vol	src	wings	credit	maxloss	risk	pct
+----------------------------------------------------------------------------
+XSP	754.76	15.73	^VIX	755pm13	572	728	1456	29.1%
+SPX	7547.64	15.73	^VIX	7548pm131	5727	7374	14747	294.9%
+SPY	752.12	15.73	^VIX	752pm13	570	730	1460	29.2%
+QQQ	723.28	26.91	^VXN	723pm21	935	1165	2331	46.6%
+IWM	297.74	19.66	^RVX	298pm6	279	321	642	12.8%
+============================================================================
+Logged 5 vol-scaled rows to pmtracker_multi_log.jsonl  (variant:"vol")
+Settler will fill real_pl on these automatically at 15:20.
+[trading_day 2026-07-13T13:42:01.470Z] 2026-07-13 (Mon) — trading day: proceed
+(^RVX unavailable — using VIX 16.39 x 1.25 = 20.49)
+VOL-SCALED-WIDE variant  2026-07-13   (WING_MULT=1.75)
+sym	open	vol	src	wings	credit	maxloss	risk	pct
+----------------------------------------------------------------------------
+/root/ibkr-webhook/pmtracker_feed_vol_wide.js:57
+  const FLOOR_PCT = (sym === 'IWM') ? 0.020 : 0.015;
+                    ^
+
+ReferenceError: sym is not defined
+    at modelFlyVol (/root/ibkr-webhook/pmtracker_feed_vol_wide.js:57:21)
+    at /root/ibkr-webhook/pmtracker_feed_vol_wide.js:136:17
+
+Node.js v20.20.2
+[trading_day 2026-07-14T13:42:01.526Z] 2026-07-14 (Tue) — trading day: proceed
+(^RVX unavailable — using VIX 16.72 x 1.25 = 20.9)
+VOL-SCALED-WIDE variant  2026-07-14   (WING_MULT=1.75)
+sym	open	vol	src	wings	credit	maxloss	risk	pct
+----------------------------------------------------------------------------
+/root/ibkr-webhook/pmtracker_feed_vol_wide.js:57
+  const FLOOR_PCT = (sym === 'IWM') ? 0.020 : 0.015;
+                    ^
+
+ReferenceError: sym is not defined
+    at modelFlyVol (/root/ibkr-webhook/pmtracker_feed_vol_wide.js:57:21)
+    at /root/ibkr-webhook/pmtracker_feed_vol_wide.js:136:17
+
+Node.js v20.20.2
+[trading_day 2026-07-15T13:42:01.729Z] 2026-07-15 (Wed) — trading day: proceed
+(^RVX unavailable — using VIX 16.17 x 1.25 = 20.21)
+VOL-SCALED-WIDE variant  2026-07-15   (WING_MULT=1.75)
+sym	open	vol	src	wings	credit	maxloss	risk	pct
+----------------------------------------------------------------------------
+XSP	757.17	16.17	^VIX	757pm13	586	714	1428	28.6%
+SPX	7571.72	16.17	^VIX	7572pm135	5905	7595	15191	303.8%
+SPY	754.26	16.17	^VIX	754pm13	584	716	1431	28.6%
+QQQ	723.96	26.28	^VXN	724pm21	918	1182	2365	47.3%
+IWM	295.20	20.21	^RVX	295pm7	291	409	818	16.4%
+============================================================================
+Logged 5 vol-scaled rows to pmtracker_multi_log.jsonl  (variant:"vol")
+Settler will fill real_pl on these automatically at 15:20.
+[trading_day 2026-07-16T13:42:01.369Z] 2026-07-16 (Thu) — trading day: proceed
+(^RVX unavailable — using VIX 16.17 x 1.25 = 20.21)
+VOL-SCALED-WIDE variant  2026-07-16   (WING_MULT=1.75)
+sym	open	vol	src	wings	credit	maxloss	risk	pct
+----------------------------------------------------------------------------
+XSP	755.88	16.17	^VIX	756pm13	585	715	1429	28.6%
+SPX	7558.80	16.17	^VIX	7559pm135	5896	7604	15207	304.1%
+SPY	752.85	16.17	^VIX	753pm13	584	716	1433	28.7%
+QQQ	712.01	25.65	^VXN	712pm20	880	1120	2241	44.8%
+IWM	294.61	20.21	^RVX	295pm7	292	408	816	16.3%
+============================================================================
+Logged 5 vol-scaled rows to pmtracker_multi_log.jsonl  (variant:"vol")
+Settler will fill real_pl on these automatically at 15:20.
+[trading_day 2026-07-17T13:42:01.192Z] 2026-07-17 (Fri) — trading day: proceed
+(^RVX unavailable — using VIX 19.02 x 1.25 = 23.77)
+VOL-SCALED-WIDE variant  2026-07-17   (WING_MULT=1.75)
+sym	open	vol	src	wings	credit	maxloss	risk	pct
+----------------------------------------------------------------------------
+XSP	744.75	19.02	^VIX	745pm16	686	914	1827	36.5%
+SPX	7447.52	19.02	^VIX	7448pm156	6830	8770	17540	350.8%
+SPY	742.00	19.02	^VIX	742pm16	684	916	1832	36.6%
+QQQ	691.65	27.34	^VXN	692pm21	914	1186	2373	47.5%
+IWM	292.10	23.77	^RVX	292pm8	337	463	925	18.5%
+============================================================================
+Logged 5 vol-scaled rows to pmtracker_multi_log.jsonl  (variant:"vol")
+Settler will fill real_pl on these automatically at 15:20.
+[trading_day 2026-07-20T13:42:01.256Z] 2026-07-20 (Mon) — trading day: proceed
+(^RVX unavailable — using VIX 18.06 x 1.25 = 22.57)
+VOL-SCALED-WIDE variant  2026-07-20   (WING_MULT=1.75)
+sym	open	vol	src	wings	credit	maxloss	risk	pct
+----------------------------------------------------------------------------
+XSP	748.92	18.06	^VIX	749pm15	653	847	1694	33.9%
+SPX	7489.18	18.06	^VIX	7489pm149	6521	8379	16757	335.1%
+SPY	747.00	18.06	^VIX	747pm15	652	848	1697	33.9%
+QQQ	702.25	29.03	^VXN	702pm22	979	1221	2442	48.8%
+IWM	294.97	22.57	^RVX	295pm7	318	382	764	15.3%
+============================================================================
+Logged 5 vol-scaled rows to pmtracker_multi_log.jsonl  (variant:"vol")
+Settler will fill real_pl on these automatically at 15:20.
+[trading_day 2026-07-21T13:42:01.103Z] 2026-07-21 (Tue) — trading day: proceed
+(^RVX unavailable — using VIX 17.75 x 1.25 = 22.19)
+VOL-SCALED-WIDE variant  2026-07-21   (WING_MULT=1.75)
+sym	open	vol	src	wings	credit	maxloss	risk	pct
+----------------------------------------------------------------------------
+XSP	749.00	17.75	^VIX	749pm15	644	856	1713	34.3%
+SPX	7489.95	17.75	^VIX	7490pm147	6415	8285	16571	331.4%
+SPY	746.27	17.75	^VIX	746pm15	642	858	1716	34.3%
+QQQ	706.59	28.53	^VXN	707pm22	971	1229	2458	49.2%
+IWM	293.37	22.19	^RVX	293pm7	313	387	774	15.5%
+============================================================================
+Logged 5 vol-scaled rows to pmtracker_multi_log.jsonl  (variant:"vol")
+Settler will fill real_pl on these automatically at 15:20.
+[trading_day 2026-07-22T13:42:01.210Z] 2026-07-22 (Wed) — trading day: proceed
+VOL-SCALED-WIDE variant  2026-07-22   (WING_MULT=1.75)
+sym	open	vol	src	wings	credit	maxloss	risk	pct
+----------------------------------------------------------------------------
+XSP	749.75	17.35	^VIX	750pm14	625	775	1550	31%
+SPX	7497.47	17.35	^VIX	7497pm143	6269	8031	16061	321.2%
+============================================================================
+Logged 2 vol-scaled rows to pmtracker_multi_log.jsonl  (variant:"vol")
+Settler will fill real_pl on these automatically at 15:20.

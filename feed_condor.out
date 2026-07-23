@@ -1,0 +1,163 @@
+IRON CONDOR variant  2026-07-02   VIX=16.75  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	747.88	740/756	732/764	116	684	1369	27.4%
+SPX	7478.84	7400/7558	7321/7637	1179	6721	13442	268.8%
+SPY	745.76	738/754	730/762	115	685	1370	27.4%
+QQQ	725.17	717/733	709/741	107	693	1387	27.7%
+IWM	299.32	296/302	293/305	51	249	497	9.9%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-03T08:42:01.157Z] 2026-07-03 (Fri) — market holiday: SKIP (market closed)
+[trading_day 2026-07-06T08:42:01.092Z] 2026-07-06 (Mon) — trading day: proceed
+IRON CONDOR variant  2026-07-06   VIX=16.31  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	749.51	742/758	734/766	109	691	1382	27.6%
+SPX	7495.14	7418/7572	7341/7649	1152	6548	13095	261.9%
+QQQ	712.60	706/720	699/727	117	583	1165	23.3%
+====================================================================================
+Logged 3 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-07T13:42:01.607Z] 2026-07-07 (Tue) — trading day: proceed
+IRON CONDOR variant  2026-07-07   VIX=15.89  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	751.66	744/760	736/768	102	698	1396	27.9%
+SPX	7516.63	7442/7592	7367/7667	1131	6369	12737	254.7%
+SPY	750.16	742/758	734/766	101	699	1397	27.9%
+QQQ	722.82	716/730	709/737	114	586	1173	23.5%
+IWM	299.17	296/302	293/305	45	255	510	10.2%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-08T13:42:02.034Z] 2026-07-08 (Wed) — trading day: proceed
+IRON CONDOR variant  2026-07-08   VIX=17.43  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	747.65	740/756	732/764	128	672	1344	26.9%
+SPX	7476.54	7395/7559	7313/7641	1231	6969	13939	278.8%
+SPY	743.21	735/751	727/759	126	674	1348	27%
+QQQ	709.43	701/717	693/725	112	688	1376	27.5%
+IWM	293.97	291/297	288/300	53	247	493	9.9%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-09T13:42:02.023Z] 2026-07-09 (Thu) — trading day: proceed
+IRON CONDOR variant  2026-07-09   VIX=16.71  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	749.16	741/757	733/765	115	685	1369	27.4%
+SPX	7491.60	7413/7571	7334/7650	1177	6723	13446	268.9%
+SPY	747.26	739/755	731/763	115	685	1370	27.4%
+QQQ	711.44	704/718	697/725	124	576	1153	23.1%
+IWM	295.22	292/298	289/301	49	251	502	10%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-10T13:42:01.073Z] 2026-07-10 (Fri) — trading day: proceed
+IRON CONDOR variant  2026-07-10   VIX=15.73  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	754.76	748/762	741/769	123	577	1154	23.1%
+SPX	7547.64	7473/7623	7398/7698	1114	6386	12771	255.4%
+SPY	752.12	745/759	738/766	122	578	1156	23.1%
+QQQ	723.28	716/730	709/737	111	589	1178	23.6%
+IWM	297.74	295/301	292/304	43	257	513	10.3%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-13T13:42:01.476Z] 2026-07-13 (Mon) — trading day: proceed
+IRON CONDOR variant  2026-07-13   VIX=16.39  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	754.75	747/763	739/771	112	688	1376	27.5%
+SPX	7547.53	7470/7626	7392/7704	1164	6636	13271	265.4%
+SPY	752.54	745/761	737/769	112	688	1377	27.5%
+QQQ	717.72	711/725	704/732	120	580	1159	23.2%
+IWM	295.01	292/298	289/301	47	253	507	10.1%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-14T13:42:01.513Z] 2026-07-14 (Tue) — trading day: proceed
+IRON CONDOR variant  2026-07-14   VIX=16.72  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	753.67	746/762	738/770	118	682	1365	27.3%
+SPX	7536.70	7458/7616	7379/7695	1196	6704	13407	268.1%
+SPY	750.85	743/759	735/767	116	684	1367	27.3%
+QQQ	720.22	712/728	704/736	104	696	1391	27.8%
+IWM	295.47	292/298	289/301	50	250	499	10%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-15T13:42:01.740Z] 2026-07-15 (Wed) — trading day: proceed
+IRON CONDOR variant  2026-07-15   VIX=16.17  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	757.17	749/765	741/773	109	691	1382	27.6%
+SPX	7571.72	7495/7649	7418/7726	1157	6543	13086	261.7%
+SPY	754.26	746/762	738/770	108	692	1384	27.7%
+QQQ	723.96	717/731	710/738	119	581	1162	23.2%
+IWM	295.20	292/298	289/301	45	255	509	10.2%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-16T13:42:01.377Z] 2026-07-16 (Thu) — trading day: proceed
+IRON CONDOR variant  2026-07-16   VIX=16.17  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	755.88	748/764	740/772	109	692	1383	27.7%
+SPX	7558.80	7482/7636	7405/7713	1152	6548	13096	261.9%
+SPY	752.85	745/761	737/769	107	693	1385	27.7%
+QQQ	712.01	705/719	698/726	114	586	1172	23.4%
+IWM	294.61	292/298	289/301	46	254	508	10.2%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-17T13:42:01.196Z] 2026-07-17 (Fri) — trading day: proceed
+IRON CONDOR variant  2026-07-17   VIX=19.01  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	744.75	736/754	727/763	132	768	1536	30.7%
+SPX	7447.52	7359/7537	7270/7626	1339	7561	15122	302.4%
+SPY	742.00	733/751	724/760	130	770	1539	30.8%
+QQQ	691.65	684/700	676/708	131	669	1339	26.8%
+IWM	292.10	289/295	286/298	64	236	473	9.5%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-20T13:42:01.269Z] 2026-07-20 (Mon) — trading day: proceed
+IRON CONDOR variant  2026-07-20   VIX=18.06  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	748.92	740/758	731/767	117	783	1567	31.3%
+SPX	7489.18	7404/7574	7319/7659	1279	7221	14441	288.8%
+SPY	747.00	739/755	731/763	138	662	1323	26.5%
+QQQ	702.25	694/710	686/718	119	681	1361	27.2%
+IWM	294.97	292/298	289/301	58	242	483	9.7%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-21T13:42:01.093Z] 2026-07-21 (Tue) — trading day: proceed
+IRON CONDOR variant  2026-07-21   VIX=17.75  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	749.00	741/757	733/765	134	666	1332	26.6%
+SPX	7489.95	7406/7574	7322/7658	1247	7153	14305	286.1%
+SPY	746.27	738/754	730/762	133	667	1334	26.7%
+QQQ	706.59	699/715	691/723	116	684	1367	27.3%
+IWM	293.37	290/296	287/299	56	244	488	9.8%
+====================================================================================
+Logged 5 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.
+[trading_day 2026-07-22T13:42:01.227Z] 2026-07-22 (Wed) — trading day: proceed
+IRON CONDOR variant  2026-07-22   VIX=17.35  (shorts +/-1EM, wings 1EM)
+sym	open	shorts		wings		credit	maxloss	risk	pct
+------------------------------------------------------------------------------------
+XSP	749.75	742/758	734/766	127	673	1346	26.9%
+SPX	7497.47	7415/7579	7333/7661	1225	6975	13950	279%
+====================================================================================
+Logged 2 condor rows to pmtracker_multi_log.jsonl  (variant:"condor")
+Settler scores these automatically at 15:20 — flyPnL formula handles all four strikes.

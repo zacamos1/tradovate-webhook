@@ -1,0 +1,257 @@
+[
+    {
+        "Id": "5268a775a70cb2fb11fe375e251d0dafe6bf94d1fd82eb4d5e6a46b3ae48162a",
+        "Created": "2026-07-21T10:22:22.437164065Z",
+        "Path": "/home/ibgateway/scripts/run.sh",
+        "Args": [],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 1072195,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-07-21T11:38:28.176363979Z",
+            "FinishedAt": "2026-07-21T11:38:27.932768884Z"
+        },
+        "Image": "sha256:456c86d2079eea269130319e000d55f4bef602a5c849ca18e29976eefd0236f2",
+        "ResolvConfPath": "/var/lib/docker/containers/5268a775a70cb2fb11fe375e251d0dafe6bf94d1fd82eb4d5e6a46b3ae48162a/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/5268a775a70cb2fb11fe375e251d0dafe6bf94d1fd82eb4d5e6a46b3ae48162a/hostname",
+        "HostsPath": "/var/lib/docker/containers/5268a775a70cb2fb11fe375e251d0dafe6bf94d1fd82eb4d5e6a46b3ae48162a/hosts",
+        "LogPath": "/var/lib/docker/containers/5268a775a70cb2fb11fe375e251d0dafe6bf94d1fd82eb4d5e6a46b3ae48162a/5268a775a70cb2fb11fe375e251d0dafe6bf94d1fd82eb4d5e6a46b3ae48162a-json.log",
+        "Name": "/ibgw-ib-gateway-1",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "ibgw_default",
+            "PortBindings": {
+                "4004/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "4002"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "always",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "5268a775a70c",
+            "Domainname": "",
+            "User": "1000:1000",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "ExposedPorts": {
+                "4004/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "TWOFA_TIMEOUT_ACTION=restart",
+                "READ_ONLY_API=no",
+                "TIME_ZONE=America/Chicago",
+                "AUTO_RESTART_TIME=11:59 PM",
+                "TWS_USERID=lfsyqb375",
+                "TWS_API_TRUSTED_IPS=0.0.0.0",
+                "TRADING_MODE=paper",
+                "BYPASS_WARNING=yes",
+                "EXISTING_SESSION_DETECTED_ACTION=primary",
+                "TWS_PASSWORD=Oscardog1!",
+                "TWS_ACCEPT_INCOMING=accept",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "IB_GATEWAY_VERSION=10.30.1t",
+                "HOME=/home/ibgateway",
+                "TWS_MAJOR_VRSN=10.30.1t",
+                "TWS_PATH=/home/ibgateway/Jts",
+                "TWS_INI=jts.ini",
+                "TWS_INI_TMPL=jts.ini.tmpl",
+                "IBC_PATH=/home/ibgateway/ibc",
+                "IBC_INI=/home/ibgateway/ibc/config.ini",
+                "IBC_INI_TMPL=/home/ibgateway/ibc/config.ini.tmpl",
+                "SCRIPT_PATH=/home/ibgateway/scripts",
+                "GATEWAY_OR_TWS=gateway"
+            ],
+            "Cmd": [
+                "/home/ibgateway/scripts/run.sh"
+            ],
+            "Image": "ghcr.io/gnzsnz/ib-gateway:10.30.1t",
+            "Volumes": null,
+            "WorkingDir": "/home/ibgateway",
+            "Entrypoint": null,
+            "Labels": {
+                "com.docker.compose.config-hash": "98bfea5be147d8b052c11f907f60291a2de6dab6dcadab9592a6438cb8ad0ebf",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "",
+                "com.docker.compose.image": "sha256:456c86d2079eea269130319e000d55f4bef602a5c849ca18e29976eefd0236f2",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "ibgw",
+                "com.docker.compose.project.config_files": "/root/ibgw/docker-compose.yml",
+                "com.docker.compose.project.working_dir": "/root/ibgw",
+                "com.docker.compose.replace": "ib-gateway-1",
+                "com.docker.compose.service": "ib-gateway",
+                "com.docker.compose.version": "5.2.0",
+                "org.opencontainers.image.created": "2025-01-08T12:33:48.120Z",
+                "org.opencontainers.image.description": "Docker image with IB Gateway/TWS and IBC",
+                "org.opencontainers.image.licenses": "MIT",
+                "org.opencontainers.image.ref.name": "ubuntu",
+                "org.opencontainers.image.revision": "2ac54b59cbd022da8760be047a81916980c4d615",
+                "org.opencontainers.image.source": "https://github.com/gnzsnz/ib-gateway-docker",
+                "org.opencontainers.image.title": "ib-gateway-docker",
+                "org.opencontainers.image.url": "https://github.com/gnzsnz/ib-gateway-docker",
+                "org.opencontainers.image.version": "10.30"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "4faaf66912434f421967f6d41a6bfd3509a952223a2480798fd30d7437640e30",
+            "SandboxKey": "/var/run/docker/netns/4faaf6691243",
+            "Ports": {
+                "4004/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "4002"
+                    }
+                ]
+            },
+            "Networks": {
+                "ibgw_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "ibgw-ib-gateway-1",
+                        "ib-gateway"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "84f48859a4feba9793af5290b84a2e4acd82e598c3d9d002f59cf777d7b28651",
+                    "EndpointID": "2c86278cbee2fbc8a1f82c1db97133822bdcdd57a4fced6c56237885363367b1",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.2",
+                    "MacAddress": "16:72:ad:89:11:4c",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "ibgw-ib-gateway-1",
+                        "ib-gateway",
+                        "5268a775a70c"
+                    ]
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:95f5248b11192bdd85fa32a80efb25c495229132e41fe3f80cad5c6e5373b744",
+            "size": 1249,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

@@ -1,0 +1,400 @@
+#!/usr/bin/env node
+/**
+ * tradovate_webhook.js — VWAP Reclaim/Rejection strategy on Tradovate Demo
+ * ==========================================================================
+ *
+ * Receives signals from the VWAP reclaim engine (vwap_signal_sender.py)
+ * and executes them on the Tradovate demo account.
+ *
+ * Architecture:
+ *   vwap_signal_sender.py → POST /signal → this server → Tradovate REST API
+ *   Tradovate WebSocket  → fill/position updates → trail/stop logic
+ *
+ * Endpoints:
+ *   POST /signal   — receive VWAP signal { symbol, direction, entry, atr }
+ *   GET  /status   — current positions and P&L
+ *   GET  /health   — connection status
+ *
+ * Config (from .env):
+ *   TRADOVATE_CID          — API client ID
+ *   TRADOVATE_SECRET       — API secret
+ *   TRADOVATE_DEMO_ACCOUNT — account name e.g. DEMO7409799
+ *   TRADOVATE_PORT         — HTTP port (default 3002)
+ *
+ * Deploy:
+ *   pm2 start tradovate_webhook.js --name tradovate-webhook
+ */
+
+'use strict';
+require('dotenv').config();
+const { execSync } = require('child_process');
+const NTFY_TOPIC_ALERTS = process.env.NTFY_TOPIC || '';
+function ntfyPush(title, body, priority = 'default', tags = 'chart_with_upwards_trend') {
+  if (!NTFY_TOPIC_ALERTS) return;
+  try {
+    const safe = body.replace(/"/g, "'");
+    execSync(
+      `curl -s -H "Title: ${title}" -H "Priority: ${priority}" -H "Tags: ${tags}" -d "${safe}" https://ntfy.sh/${NTFY_TOPIC_ALERTS}`,
+      { timeout: 10000 }
+    );
+  } catch (e) { /* non-fatal, don't let notification failures break trading */ }
+}
+const http       = require('http');
+const https      = require('https');
+const WebSocket  = require('ws');
+const fs         = require('fs');
+const path       = require('path');
+
+// ── Config ──────────────────────────────────────────────────────────────────
+const CFG = {
+  cid:         process.env.TRADOVATE_CID,
+  secret:      process.env.TRADOVATE_SECRET,
+  username:    process.env.TRADOVATE_USERNAME,
+  password:    process.env.TRADOVATE_PASSWORD,
+  deviceId:    process.env.TRADOVATE_DEVICE_ID,
+  account:     process.env.TRADOVATE_DEMO_ACCOUNT || 'DEMO7409799',
+  port:        parseInt(process.env.TRADOVATE_PORT || '3002', 10),
+  maxContracts: Math.max(
+    1,
+    parseInt(process.env.MAX_CONTRACTS || '5', 10)
+  ),
+  maxDailyTrades: Math.max(
+    1,
+    parseInt(process.env.MAX_DAILY_TRADES || '20', 10)
+  ),
+  duplicateWindowSeconds: Math.max(
+    1,
+    parseInt(process.env.DUPLICATE_WINDOW_SECONDS || '15', 10)
+  ),
+  adminToken: process.env.TRADOVATE_ADMIN_TOKEN || '',
+  baseUrl:     'https://demo.tradovateapi.com/v1',
+  wsUrl:       'wss://demo.tradovateapi.com/v1/websocket',
+  logFile:     path.join(__dirname, 'tradovate_log.jsonl'),
+  dashboardDir: path.join(__dirname, 'dashboard'),
+  stateDir:    path.join(__dirname, 'state'),
+  positionsFile: path.join(__dirname, 'state', 'positions.json'),
+  runtimeFile: path.join(__dirname, 'state', 'runtime.json'),
+  reconciliationFile: path.join(
+    __dirname,
+    'state',
+    'reconciliation.json'
+  ),
+  reconcileSeconds: Math.max(
+    15,
+    parseInt(process.env.RECONCILE_SECONDS || '60', 10)
+  ),
+  appId:       'VWAP Reclaim Futures Bot',
+  appVersion:  '1.0.0',
+};
+
+// ── Exit parameters (matching the backtest best params) ──────────────────────
+const ARM_POINTS   = 1.0;
+const TRAIL_POINTS = 0.75;
+const STOP_MULT    = 7.0;
+
+// Per-instrument overrides (validated Jul 19 2026 — see memory)
+const STOP_MULT_OVERRIDE = { MES: 6.0 };
+const TRAIL_POINTS_OVERRIDE = { MES: 0.25 };
+
+function getStopMult(symbol) {
+  const root = symbol.slice(0, 3);
+  return STOP_MULT_OVERRIDE[root] ?? STOP_MULT;
+}
+
+function getTrailPoints(symbol) {
+  const root = symbol.slice(0, 3);
+  return TRAIL_POINTS_OVERRIDE[root] ?? TRAIL_POINTS;
+}
+const MAX_BARS     = 24;    // 24 × 5min = 120 min max hold
+const BAR_SECONDS  = 300;   // 5-minute bars
+
+// ── State ────────────────────────────────────────────────────────────────────
+let accessToken   = null;
+let tokenExpiry   = 0;
+let accountId     = null;   // numeric account ID
+let ws            = null;
+let wsConnected   = false;
+let positions     = {};     // posKey → position state
+let reconnectTimer = null;
+let startupReady = false;
+let reconciliationRunning = false;
+
+const startedAt = Date.now();
+
+const reconciliationState = {
+  safetyLock: false,
+  lastRunTs: null,
+  lastSuccessTs: null,
+  lastError: null,
+  mismatches: [],
+  brokerPositions: [],
+};
+
+const runtimeState = {
+  paused: false,
+  entriesEnabled: true,
+  lastSignal: null,
+  lastOrder: null,
+  recentSignals: new Map(),
+  daily: {
+    date: null,
+    trades: 0,
+    exits: 0,
+    estimatedRealizedDollars: 0,
+  },
+};
+
+// ── Logging ──────────────────────────────────────────────────────────────────
+function log(event, data = {}) {
+  const entry = { ts: new Date().toISOString(), event, ...data };
+  console.log(JSON.stringify(entry));
+  fs.appendFileSync(CFG.logFile, JSON.stringify(entry) + '\n');
+}
+
+function ensureStateDir() {
+  fs.mkdirSync(CFG.stateDir, { recursive: true });
+}
+
+function atomicWriteJson(filePath, value) {
+  ensureStateDir();
+
+  const tempPath =
+    filePath + '.tmp-' + process.pid + '-' + Date.now();
+
+  fs.writeFileSync(
+    tempPath,
+    JSON.stringify(value, null, 2) + '\n',
+    'utf8'
+  );
+
+  fs.renameSync(tempPath, filePath);
+}
+
+function persistedRuntimeState() {
+  return {
+    paused: runtimeState.paused,
+    entriesEnabled: runtimeState.entriesEnabled,
+    lastSignal: runtimeState.lastSignal,
+    lastOrder: runtimeState.lastOrder,
+    daily: runtimeState.daily,
+  };
+}
+
+function persistPositions() {
+  try {
+    atomicWriteJson(CFG.positionsFile, positions);
+  } catch (error) {
+    log('state_persist_error', {
+      target: 'positions',
+      error: error.message,
+    });
+  }
+}
+
+function persistRuntime() {
+  try {
+    atomicWriteJson(
+      CFG.runtimeFile,
+      persistedRuntimeState()
+    );
+  } catch (error) {
+    log('state_persist_error', {
+      target: 'runtime',
+      error: error.message,
+    });
+  }
+}
+
+function persistReconciliation() {
+  try {
+    atomicWriteJson(
+      CFG.reconciliationFile,
+      reconciliationState
+    );
+  } catch (error) {
+    log('state_persist_error', {
+      target: 'reconciliation',
+      error: error.message,
+    });
+  }
+}
+
+function persistAllState() {
+  persistPositions();
+  persistRuntime();
+  persistReconciliation();
+}
+
+function readJsonFile(filePath, fallback) {
+  try {
+    if (!fs.existsSync(filePath)) return fallback;
+
+    const raw = fs.readFileSync(filePath, 'utf8').trim();
+    if (!raw) return fallback;
+
+    return JSON.parse(raw);
+  } catch (error) {
+    log('state_load_error', {
+      filePath,
+      error: error.message,
+    });
+    return fallback;
+  }
+}
+
+function loadPersistedState() {
+  ensureStateDir();
+
+  const savedPositions =
+    readJsonFile(CFG.positionsFile, {});
+
+  if (
+    savedPositions &&
+    typeof savedPositions === 'object' &&
+    !Array.isArray(savedPositions)
+  ) {
+    positions = savedPositions;
+  }
+
+  const savedRuntime =
+    readJsonFile(CFG.runtimeFile, {});
+
+  if (typeof savedRuntime.paused === 'boolean') {
+    runtimeState.paused = savedRuntime.paused;
+  }
+
+  if (typeof savedRuntime.entriesEnabled === 'boolean') {
+    runtimeState.entriesEnabled =
+      savedRuntime.entriesEnabled;
+  }
+
+  if (savedRuntime.lastSignal) {
+    runtimeState.lastSignal = savedRuntime.lastSignal;
+  }
+
+  if (savedRuntime.lastOrder) {
+    runtimeState.lastOrder = savedRuntime.lastOrder;
+  }
+
+  if (
+    savedRuntime.daily &&
+    typeof savedRuntime.daily === 'object'
+  ) {
+    runtimeState.daily = {
+      ...runtimeState.daily,
+      ...savedRuntime.daily,
+    };
+  }
+
+  const savedReconciliation =
+    readJsonFile(CFG.reconciliationFile, {});
+
+  if (
+    savedReconciliation &&
+    typeof savedReconciliation === 'object'
+  ) {
+    Object.assign(
+      reconciliationState,
+      savedReconciliation
+    );
+  }
+
+  log('state_loaded', {
+    positions: Object.keys(positions).length,
+    paused: runtimeState.paused,
+    entriesEnabled: runtimeState.entriesEnabled,
+    daily: runtimeState.daily,
+  });
+}
+
+function etDateKey() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function resetDailyStateIfNeeded() {
+  const today = etDateKey();
+
+  if (runtimeState.daily.date !== today) {
+    runtimeState.daily = {
+      date: today,
+      trades: 0,
+      exits: 0,
+      estimatedRealizedDollars: 0,
+    };
+
+    log('daily_state_reset', { date: today });
+    persistRuntime();
+  }
+}
+
+function pointValue(symbol) {
+  const root = String(symbol).replace('@', '').toUpperCase().slice(0, 3);
+
+  return {
+    MES: 5.00,
+    MNQ: 2.00,
+    MYM: 0.50,
+  }[root] || 0;
+}
+
+function recordEstimatedRealized(symbol, pnlPoints, qty) {
+  resetDailyStateIfNeeded();
+
+  const dollars =
+    Number(pnlPoints) *
+    pointValue(symbol) *
+    Math.max(1, Number(qty) || 1);
+
+  runtimeState.daily.exits += 1;
+  runtimeState.daily.estimatedRealizedDollars += dollars;
+
+  log('estimated_realized_recorded', {
+    symbol,
+    pnlPoints: Number(pnlPoints),
+    qty,
+    estimatedDollars: Number(dollars.toFixed(2)),
+    dailyEstimatedDollars: Number(
+      runtimeState.daily.estimatedRealizedDollars.toFixed(2)
+    ),
+  });
+
+  persistRuntime();
+}
+
+function cleanRecentSignals() {
+  const cutoff =
+    Date.now() - CFG.duplicateWindowSeconds * 1000;
+
+  for (const [key, timestamp] of runtimeState.recentSignals.entries()) {
+    if (timestamp < cutoff) {
+      runtimeState.recentSignals.delete(key);
+    }
+  }
+}
+
+function duplicateFingerprint(sig, symbol, requestedAction) {
+  return JSON.stringify({
+    symbol,
+    action: requestedAction,
+    signalType:
+      sig.signal_type ||
+      sig.reason ||
+      requestedAction,
+    price: Number(sig.entry_price ?? sig.price) || null,
+  });
+}
+
+function isDuplicateSignal(fingerprint) {
+  cleanRecentSignals();
+
+  const previous = runtimeState.recentSignals.get(fingerprint);
+
+  if (
+    previous &&
+    Date.now() - previous < CFG.duplicateWindowSeconds * 1000
+  ) {

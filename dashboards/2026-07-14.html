@@ -1,0 +1,123 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fly Dashboard — 2026-07-14</title><style>
+body{background:#12151c;color:#dde3ee;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;margin:0;padding:24px}
+h1{font-size:22px;margin:0 0 4px}.sub{color:#7a869c;font-size:13px;margin-bottom:14px}
+.strip{background:#1a1f2b;border:1px solid #262d3d;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:#a9b4c9}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.card{background:#1a1f2b;border:1px solid #262d3d;border-radius:14px;padding:18px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#8b98b0;margin:0 0 12px}
+.big{font-size:32px;font-weight:700}.pos{color:#2e9e5b}.neg{color:#d64545}.warn{color:#e8b44a}.muted{color:#7a869c;font-size:12px}
+svg{width:100%;height:auto}.tick{font-size:10px;fill:#7a869c;text-anchor:middle}.val{font-size:11px;font-weight:600;text-anchor:middle}
+.cval{font-size:8.5px;fill:#12151c;font-weight:700;text-anchor:middle}
+.empty{color:#555;padding:30px;text-align:center}
+.gauge{display:flex;align-items:center;gap:10px;margin:8px 0}.glabel{width:180px;font-size:12px;color:#a9b4c9}
+.gbar{flex:1;height:10px;background:#262d3d;border-radius:5px;overflow:hidden}.gfill{height:100%;border-radius:5px}
+.gval{width:44px;font-size:13px;font-weight:700;text-align:right}
+.check{margin:6px 0;font-size:14px}.check .ok{color:#2e9e5b}.check .no{color:#555}
+.stat{display:inline-block;margin-right:24px;margin-bottom:8px}.stat .n{font-size:22px;font-weight:700}.stat .l{font-size:11px;color:#7a869c}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px 8px;text-align:left;border-bottom:1px solid #262d3d}th{color:#8b98b0;font-size:11px;text-transform:uppercase}
+.meter{height:16px;background:#262d3d;border-radius:8px;overflow:hidden;margin:8px 0}.mfill{height:100%;background:linear-gradient(90deg,#2e9e5b,#4d8de8)}
+</style></head><body>
+<h1>🪰 Premium Engine — Readiness Dashboard <span class="muted">v1.1</span></h1>
+<div class="sub">2026-07-14 · vol_wide XSP+IWM · model credits until fill sample matures</div>
+<div class="strip"><b>Regime (context only):</b> VIX 16.5 (-3.8% d/d) · SPY 5-day +0.6% · <b>NORMAL</b> — sizing is governed by the band & ladder, never by this strip</div>
+<div class="grid">
+<div class="card"><h2>Fill honesty (model vs market)</h2>
+  <div class="big neg">0.523</div>
+  <div class="muted">trailing avg over 2 readings · first reading prints 9:44 ET</div></div>
+<div class="card"><h2>Drawdown</h2>
+  <span class="stat"><div class="n pos">$0</div><div class="l">current drawdown</div></span>
+  <span class="stat"><div class="n">$0</div><div class="l">worst historical</div></span>
+  <span class="stat"><div class="n">0</div><div class="l">days since equity high</div></span></div>
+<div class="card"><h2>Risk / band</h2>
+  <span class="stat"><div class="n">$2407</div><div class="l">capital deployed (max loss)</div></span>
+  <span class="stat"><div class="n neg">40.1%</div><div class="l">of $6,000 equity (band: 15%)</div></span>
+  <span class="stat"><div class="n neg">1</div><div class="l">unresolved orphans</div></span></div>
+<div class="card" style="grid-column:1/-1"><h2>Live book — cumulative P&L</h2><svg viewBox="0 0 640 220"><polyline points="40,126.3317856024174 226.66666666666666,117.2395113592394 413.3333333333333,91.95087796878741 600,40" fill="none" stroke="#4d8de8" stroke-width="2.5"/>
+    <circle cx="40" cy="126.3317856024174" r="3.5" fill="#4d8de8"/><text x="40" y="196" class="tick">07-08</text><circle cx="226.66666666666666" cy="117.2395113592394" r="3.5" fill="#4d8de8"/><text x="226.66666666666666" y="196" class="tick">07-09</text><circle cx="413.3333333333333" cy="91.95087796878741" r="3.5" fill="#4d8de8"/><text x="413.3333333333333" y="196" class="tick">07-10</text><circle cx="600" cy="40" r="3.5" fill="#4d8de8"/><text x="600" y="196" class="tick">07-14</text>
+    <text x="592" y="26" style="font-size:15px;font-weight:700;text-anchor:end" fill="#eaf1ff">$4,342</text>
+    <line x1="40" y1="180" x2="600" y2="180" stroke="#555" stroke-dasharray="3"/></svg></div>
+<div class="card" style="grid-column:1/-1"><h2>Daily P&L</h2><svg viewBox="0 0 640 220"><line x1="40" y1="110" x2="600" y2="110" stroke="#555"/>
+    <rect x="45" y="40" width="60" height="70" rx="4" fill="#2e9e5b"/><text x="75" y="34" class="val" fill="#2e9e5b">$1664</text><text x="75" y="212" class="tick">07-08</text><rect x="185" y="98.14085387101814" width="60" height="11.859146128981868" rx="4" fill="#2e9e5b"/><text x="215" y="92.14085387101814" class="val" fill="#2e9e5b">$282</text><text x="215" y="212" class="tick">07-09</text><rect x="325" y="77.01577726775693" width="60" height="32.98422273224306" rx="4" fill="#2e9e5b"/><text x="355" y="71.01577726775693" class="val" fill="#2e9e5b">$784</text><text x="355" y="212" class="tick">07-10</text><rect x="465" y="42.23993943836291" width="60" height="67.76006056163709" rx="4" fill="#2e9e5b"/><text x="495" y="36.23993943836291" class="val" fill="#2e9e5b">$1611</text><text x="495" y="212" class="tick">07-14</text></svg></div>
+<div class="card"><h2>Monthly calendar</h2><svg viewBox="0 0 322 322"><text x="20" y="14" class="tick">S</text><text x="66" y="14" class="tick">M</text><text x="112" y="14" class="tick">T</text><text x="158" y="14" class="tick">W</text><text x="204" y="14" class="tick">T</text><text x="250" y="14" class="tick">F</text><text x="296" y="14" class="tick">S</text><rect x="138" y="46" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="158" y="63" class="tick" fill="#dde3ee">1</text>
+      <rect x="184" y="46" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="204" y="63" class="tick" fill="#dde3ee">2</text>
+      <rect x="230" y="46" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="250" y="63" class="tick" fill="#dde3ee">3</text>
+      <rect x="276" y="46" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="296" y="63" class="tick" fill="#dde3ee">4</text>
+      <rect x="0" y="92" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="20" y="109" class="tick" fill="#dde3ee">5</text>
+      <rect x="46" y="92" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="66" y="109" class="tick" fill="#dde3ee">6</text>
+      <rect x="92" y="92" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="112" y="109" class="tick" fill="#dde3ee">7</text>
+      <rect x="138" y="92" width="40" height="40" rx="7" fill="#2e9e5b"/>
+      <text x="158" y="109" class="tick" fill="#dde3ee">8</text>
+      <text x="158" y="124" class="cval">$1664</text><rect x="184" y="92" width="40" height="40" rx="7" fill="#2e9e5b"/>
+      <text x="204" y="109" class="tick" fill="#dde3ee">9</text>
+      <text x="204" y="124" class="cval">$282</text><rect x="230" y="92" width="40" height="40" rx="7" fill="#2e9e5b"/>
+      <text x="250" y="109" class="tick" fill="#dde3ee">10</text>
+      <text x="250" y="124" class="cval">$784</text><rect x="276" y="92" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="296" y="109" class="tick" fill="#dde3ee">11</text>
+      <rect x="0" y="138" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="20" y="155" class="tick" fill="#dde3ee">12</text>
+      <rect x="46" y="138" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="66" y="155" class="tick" fill="#dde3ee">13</text>
+      <rect x="92" y="138" width="40" height="40" rx="7" fill="#2e9e5b"/>
+      <text x="112" y="155" class="tick" fill="#dde3ee">14</text>
+      <text x="112" y="170" class="cval">$1611</text><rect x="138" y="138" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="158" y="155" class="tick" fill="#dde3ee">15</text>
+      <rect x="184" y="138" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="204" y="155" class="tick" fill="#dde3ee">16</text>
+      <rect x="230" y="138" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="250" y="155" class="tick" fill="#dde3ee">17</text>
+      <rect x="276" y="138" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="296" y="155" class="tick" fill="#dde3ee">18</text>
+      <rect x="0" y="184" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="20" y="201" class="tick" fill="#dde3ee">19</text>
+      <rect x="46" y="184" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="66" y="201" class="tick" fill="#dde3ee">20</text>
+      <rect x="92" y="184" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="112" y="201" class="tick" fill="#dde3ee">21</text>
+      <rect x="138" y="184" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="158" y="201" class="tick" fill="#dde3ee">22</text>
+      <rect x="184" y="184" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="204" y="201" class="tick" fill="#dde3ee">23</text>
+      <rect x="230" y="184" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="250" y="201" class="tick" fill="#dde3ee">24</text>
+      <rect x="276" y="184" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="296" y="201" class="tick" fill="#dde3ee">25</text>
+      <rect x="0" y="230" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="20" y="247" class="tick" fill="#dde3ee">26</text>
+      <rect x="46" y="230" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="66" y="247" class="tick" fill="#dde3ee">27</text>
+      <rect x="92" y="230" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="112" y="247" class="tick" fill="#dde3ee">28</text>
+      <rect x="138" y="230" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="158" y="247" class="tick" fill="#dde3ee">29</text>
+      <rect x="184" y="230" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="204" y="247" class="tick" fill="#dde3ee">30</text>
+      <rect x="230" y="230" width="40" height="40" rx="7" fill="#20263466"/>
+      <text x="250" y="247" class="tick" fill="#dde3ee">31</text>
+      </svg></div>
+<div class="card"><h2>Instrument breakdown</h2>
+  <table><tr><th>sym</th><th>P&L</th><th>green days</th><th>avg capture</th><th>max-loss</th></tr><tr><td><b>XSP</b></td><td class="pos">$3070</td><td>4/4</td><td>64%</td><td>0</td></tr><tr><td><b>IWM</b></td><td class="pos">$1272</td><td>4/4</td><td>54%</td><td>0</td></tr></table>
+  <div style="margin-top:14px"><div class="gauge"><div class="glabel">XSP max wing usage</div><div class="gbar"><div class="gfill" style="width:38.31428571428572%;background:#2e9e5b"></div></div><div class="gval" style="color:#2e9e5b">38%</div></div><div class="gauge"><div class="glabel">IWM max wing usage</div><div class="gbar"><div class="gfill" style="width:34.16666666666668%;background:#2e9e5b"></div></div><div class="gval" style="color:#2e9e5b">34%</div></div></div></div>
+<div class="card"><h2>Rolling win rate</h2>
+  <div class="gauge"><div class="glabel">20-day <span class="muted">(n=4 — filling)</span></div><div class="gbar"><div class="gfill" style="width:100%;background:#555"></div></div><div class="gval">100%</div></div><div class="gauge"><div class="glabel">60-day <span class="muted">(n=4 — filling)</span></div><div class="gbar"><div class="gfill" style="width:100%;background:#555"></div></div><div class="gval">100%</div></div><div class="gauge"><div class="glabel">YTD <span class="muted">(n=4 — filling)</span></div><div class="gbar"><div class="gfill" style="width:100%;background:#555"></div></div><div class="gval">100%</div></div>
+  <div class="muted" style="margin-top:6px">18-mo reference: 87% (XSP) / 75% (IWM) win days</div></div>
+<div class="card"><h2>Intraday (real marks, today)</h2><div class="empty">marks begin 9:50 ET</div></div>
+<div class="card"><h2>Capital readiness · <span style="color:#e8b44a">PRE-LIVE (planned capital)</span></h2>
+  <span class="stat"><div class="n">$6,000</div><div class="l">equity (ACCOUNT_EQUITY)</div></span>
+  <span class="stat"><div class="n">1</div><div class="l">ladder contracts @ 15%</div></span>
+  <div style="margin-top:8px;font-size:12px;color:#a9b4c9">next rung: <b>2 contracts at $10,667</b></div>
+  <div class="meter"><div class="mfill" style="width:13%"></div></div>
+  <div class="muted">$4,667 to go · ~5 days at trailing tracked pace (paper 2-lot — indicative only)</div>
+  <div class="muted" style="margin-top:8px">de-scale rung: below $5,333 → PAUSED (below minimum) — the ladder is law in both directions</div>
+</div>
+<div class="card"><h2>Promotion progress — 0/7</h2>
+  <div class="meter"><div class="mfill" style="width:0%"></div></div>
+  <div class="check"><span class="no">○</span> 30+ tracked days (4/30)</div><div class="check"><span class="no">○</span> 5+ real fills (1/5)</div><div class="check"><span class="no">○</span> 5+ honesty readings (2/5)</div><div class="check"><span class="no">○</span> trailing ratio ≥ 0.75 (0.523)</div><div class="check"><span class="no">○</span> zero unresolved orphans</div><div class="check"><span class="no">○</span> kill-criteria document</div><div class="check"><span class="no">○</span> live second-username setup</div></div>
+</div></body></html>

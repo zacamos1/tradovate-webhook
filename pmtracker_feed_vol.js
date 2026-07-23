@@ -1,0 +1,152 @@
+#!/usr/bin/env node
+/* pmtracker_feed_vol.js — VOL-SCALED wing variant, A/B companion to pmtracker_feed.js.
+   READ-ONLY. Places no orders.
+
+   Reuses TODAY's baseline rows already written by pmtracker_feed.js (same spot, same
+   contracts, same gate) so the A/B differs in ONE thing only: wing WIDTH.
+
+   Fixed-% feed:  W = round(open * WING_PCT)                 -> width tracks PRICE
+   This variant:  W = round(open * ivd_instrument * WING_MULT) -> width tracks each
+                  instrument's own EXPECTED 1-DAY MOVE.
+
+   Per-instrument vol (the point of the exercise — QQQ realizes more, so it gets
+   its own hotter vol and therefore wider wings):
+       SPY/XSP/SPX -> ^VIX     QQQ -> ^VXN     IWM -> ^RVX
+
+   bs() and constants are copied verbatim from pmtracker_feed.js so pricing is identical;
+   only the strike width differs. Appends rows tagged variant:"vol" to the same log.
+   The settler (pmtracker_settle.js) scores every unsettled row, so these get P&L too.
+
+   Cron a few min AFTER the feed, e.g. 8:40 CT:
+     40 8 * * 1-5 cd /root/ibkr-webhook && /usr/bin/node pmtracker_feed_vol.js >> feed_vol.out 2>&1
+*/
+
+'use strict';
+const { execFile } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+const LOG_FILE  = path.join(__dirname, 'pmtracker_multi_log.jsonl');
+const CONTRACTS_N = 2;
+const WING_MULT   = 1.25;      // wings at 1.25x the expected 1-day move
+const VIX_GATE    = 30;
+const ACCT        = 5000;
+
+// per-instrument implied-vol source (Yahoo tickers)
+const VOL_SRC = { SPY:'^VIX', XSP:'^VIX', SPX:'^VIX', QQQ:'^VXN', IWM:'^RVX' };
+
+// ---- Black-Scholes (verbatim from pmtracker_feed.js: zero-rate, sst = sigma*sqrt(t)) ----
+function ncdf(x){ return 0.5*(1+erf(x/Math.SQRT2)); }
+function erf(x){
+  const t=1/(1+0.3275911*Math.abs(x));
+  const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
+  return x>=0? y : -y;
+}
+function bs(S,K,sst,call){
+  if(sst<=0) return call? Math.max(S-K,0):Math.max(K-S,0);
+  const d1=(Math.log(S/K)+0.5*sst*sst)/sst, d2=d1-sst;
+  return call? S*ncdf(d1)-K*ncdf(d2) : K*ncdf(-d2)-S*ncdf(-d1);
+}
+
+// vol-scaled fly: identical pricing to the feed, but W tracks expected move
+function modelFlyVol(open, volPct){
+  const ivd = volPct/100/Math.sqrt(252);
+  const K = Math.round(open);
+  const W = Math.max(1, Math.round(open * ivd * WING_MULT));   // <-- the only change vs fixed-%
+  const credit = (bs(open,K,ivd,true)+bs(open,K,ivd,false))
+               - (bs(open,K+W,ivd,true)+bs(open,K-W,ivd,false));
+  return { center:K, short_call:K, short_put:K, long_call:K+W, long_put:K-W,
+    model_credit:+(credit*100).toFixed(2), model_maxloss:+((W-credit)*100).toFixed(2),
+    implied_1d_move_pct:+(ivd*100).toFixed(2), wing_pts:W };
+}
+
+// ---- Yahoo helpers (same curl approach as the feed) ------------------------
+function curlJSON(url){
+  return new Promise((resolve)=>{
+    execFile('curl', ['-s','-H','User-Agent: Mozilla/5.0', url], {maxBuffer:1024*1024*5}, (err,stdout)=>{
+      if(err){ resolve(null); return; }
+      try{ resolve(JSON.parse(stdout)); }catch(e){ resolve(null); }
+    });
+  });
+}
+function retry(fn,tries=3,waitMs=1500){
+  return (async()=>{ for(let i=0;i<tries;i++){ const r=await fn(); if(r!=null) return r; await new Promise(x=>setTimeout(x,waitMs)); } return null; })();
+}
+function yahooLast(sym){   // latest index value (VIX/VXN/RVX)
+  const enc = encodeURIComponent(sym);
+  return retry(()=>curlJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=2d`).then(j=>{
+    try{ const m=j.chart.result[0].meta; if(m && m.regularMarketPrice!=null) return +m.regularMarketPrice.toFixed(2);
+         const c=j.chart.result[0].indicators.quote[0].close.filter(x=>x!=null); return c.length?+c[c.length-1].toFixed(2):null; }
+    catch(e){ return null; }
+  }));
+}
+
+// ---- main ------------------------------------------------------------------
+function todayNY(){
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+}
+
+(async () => {
+  const today = todayNY();
+  if(!fs.existsSync(LOG_FILE)){ console.error('log not found'); process.exit(1); }
+  const rows = fs.readFileSync(LOG_FILE,'utf8').split('\n').filter(l=>l.trim()).map(l=>JSON.parse(l));
+
+  // baseline rows written by the feed today (the fixed-% flies); skip our own variant rows
+  const base = rows.filter(r => r.date===today && r.variant==null);
+  if(!base.length){ console.log(`no baseline feed rows for ${today} yet — run after pmtracker_feed.js`); process.exit(0); }
+
+  // don't double-write if this already ran today
+  if(rows.some(r => r.date===today && r.variant==='vol')){ console.log(`vol variant already logged for ${today}`); process.exit(0); }
+
+  // fetch each needed vol index once
+  const need = [...new Set(base.map(r => VOL_SRC[r.symbol]).filter(Boolean))];
+  const vols = {};
+  for(const v of need){ vols[v] = await yahooLast(v); }
+
+  // ---- RVX proxy: Yahoo won't serve ^RVX; derive from VIX -------------------
+  const RVX_PROXY_MULT = 1.25;
+  const volSrcLabel = {};                       // per-index source override for logging
+  if(need.includes('^RVX') && vols['^RVX']==null){
+    let vix = vols['^VIX'];
+    if(vix==null) vix = await yahooLast('^VIX');   // VIX not in book's needs? fetch it
+    if(vix!=null && vix>=5 && vix<=100){           // sanity bounds: never proxy off garbage
+      vols['^RVX'] = +(vix * RVX_PROXY_MULT).toFixed(2);
+      volSrcLabel['^RVX'] = `rvx_proxy_vix_x${RVX_PROXY_MULT}`;
+      console.log(`(^RVX unavailable — using VIX ${vix} x ${RVX_PROXY_MULT} = ${vols['^RVX']})`);
+    } else {
+      console.log(`(^RVX unavailable and VIX fetch failed/out-of-bounds — IWM will be skipped)`);
+    }
+  }
+
+  console.log(`VOL-SCALED variant  ${today}   (WING_MULT=${WING_MULT})`);
+  console.log('sym\topen\tvol\tsrc\twings\tcredit\tmaxloss\trisk\tpct');
+  console.log('-'.repeat(76));
+
+  let wrote=0;
+  const out=[];
+  for(const r of base){
+    const vsrc = VOL_SRC[r.symbol];
+    const volPct = vols[vsrc];
+    if(volPct==null){ console.log(`${r.symbol}\t(no vol from ${vsrc}, skipped)`); continue; }
+    const gateOk = volPct <= VIX_GATE;                       // gate on the instrument's own vol
+    const fly = modelFlyVol(r.spot, volPct);
+    const risk = fly.model_maxloss * CONTRACTS_N;
+    const rec = { date:today, symbol:r.symbol, note:r.note, variant:'vol',
+      spot:r.spot, spot_src:r.spot_src, vol_pct:volPct, vol_src:(volSrcLabel[vsrc]||vsrc),
+      gate_ok:gateOk, TRADE:gateOk, contracts:CONTRACTS_N, intended_fly:fly,
+      capital_at_risk:+risk.toFixed(2), pct_acct:+(risk/ACCT*100).toFixed(1),
+      real_fill_credit:null, real_pl:null, vix_close:null, gate_held:null, was_max_loss:null, notes:null };
+    out.push(rec); wrote++;
+    console.log([r.symbol, r.spot.toFixed(2), volPct, vsrc,
+      `${fly.center}pm${fly.wing_pts}`, fly.model_credit.toFixed(0), fly.model_maxloss.toFixed(0),
+      risk.toFixed(0), rec.pct_acct+'%'].join('\t'));
+  }
+
+  if(wrote){
+    fs.appendFileSync(LOG_FILE, out.map(r=>JSON.stringify(r)).join('\n')+'\n');
+  }
+  console.log('='.repeat(76));
+  console.log(`Logged ${wrote} vol-scaled rows to ${path.basename(LOG_FILE)}  (variant:"vol")`);
+  console.log('Settler will fill real_pl on these automatically at 15:20.');
+  process.exit(0);
+})();

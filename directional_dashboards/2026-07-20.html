@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Directional Options Dashboard — 2026-07-20</title>
+<style>
+  body { background:#0f1218; color:#eaf1ff; font-family: -apple-system, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 22px; } h2 { font-size: 16px; color:#a9b4c9; margin-bottom: 8px; }
+  .sub { color:#8b98b0; font-size: 13px; margin-bottom: 1rem; }
+  .banner { background:#1d2a1f; border:1px solid #2e5a34; border-radius: 8px; padding: 10px 14px; font-size: 12px; color:#9fd9a8; margin-bottom: 1.5rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 14px; margin-bottom: 1.5rem; }
+  .card { background:#171c26; border-radius: 12px; padding: 16px; }
+  .stat { display:inline-block; margin-right: 20px; }
+  .n { font-size: 24px; font-weight: 600; } .l { font-size: 12px; color:#8b98b0; }
+  .pos { color:#2e9e5b; } .neg { color:#d64545; }
+  table { width:100%; border-collapse: collapse; font-size: 13px; }
+  td, th { padding: 6px 8px; text-align:left; border-bottom: 1px solid #262d3d; }
+  th { color:#8b98b0; font-size: 11px; text-transform: uppercase; }
+  .badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; background:#2e5a34; color:#9fd9a8; margin-left:6px; }
+</style></head><body>
+<h1>📊 Directional Options (Scout/Options Prime) — Daily Dashboard</h1>
+<div class="sub">2026-07-20 · 117 total trades since 2026-06-29</div>
+<div class="banner">✓ Data quality corrected: 32 early trades (Jun 29–Jul 7) re-derived from real Databento 1-min options price bars after the original tracking for that window was found unreliable. Remaining 85 trades use original mfe.jsonl data, confirmed internally consistent.</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="stat"><div class="n pos">65.8%</div><div class="l">win rate (77/117)</div></div>
+  </div>
+  <div class="card">
+    <div class="stat"><div class="n pos">+19.8%</div><div class="l">mean P&L per trade</div></div>
+  </div>
+  <div class="card">
+    <div class="stat"><div class="n pos">+2312%</div><div class="l">cumulative P&L% (sum)</div></div>
+  </div>
+  <div class="card">
+    <div class="stat"><div class="n pos">+$700.07</div><div class="l">cumulative P&L ($)</div></div>
+  </div>
+  <div class="card">
+    <div class="stat"><div class="n">2</div><div class="l">trades today</div></div>
+  </div>
+  <div class="card">
+    <div class="stat"><div class="n pos">+$170.00</div><div class="l">today's P&L ($)</div></div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:1.5rem"><h2>Cumulative P&L% over time</h2><svg viewBox="0 0 640 220"><polyline points="40,179.02035623409668 44.827586206896555,177.77353689567428 49.6551724137931,175.19677692960136 54.48275862068965,170.28668363019509 59.310344827586206,172.2637828668363 64.13793103448276,172.98812553011027 68.9655172413793,172.9050042408821 73.79310344827587,168.59457167090753 78.62068965517241,168.83206106870227 83.44827586206897,164.94910941475825 88.27586206896552,160.88210347752332 93.10344827586206,161.48176420695503 97.93103448275862,164.88379983036472 102.75862068965517,163.32230703986428 107.58620689655173,161.8261238337574 112.41379310344827,159.7896522476675 117.24137931034483,162.5267175572519 122.06896551724138,161.6064461407973 126.89655172413794,165.70313825275656 131.72413793103448,168.02459711620017 136.55172413793105,166.37998303647157 141.3793103448276,169.1645462256149 146.20689655172413,171.91942324003392 151.0344827586207,171.80661577608143 155.86206896551724,168.08990670059373 160.68965517241378,170.23918575063612 165.51724137931035,167.37150127226462 170.3448275862069,171.12977099236642 175.17241379310346,176.1882951653944 180,174.98303647158608 184.82758620689654,178.11195928753182 189.6551724137931,180 194.48275862068965,179.35284139100932 199.31034482758622,177.61323155216286 204.13793103448276,176.91263782866835 208.9655172413793,175.91518235793046 213.79310344827587,174.53774385072094 218.6206896551724,173.6590330788804 223.44827586206895,170.61323155216286 228.27586206896552,169.74045801526717 233.10344827586206,169.21204410517387 237.93103448275863,168.04240882103477 242.75862068965517,167.13994910941474 247.58620689655172,166.27311280746395 252.41379310344828,165.7209499575912 257.2413793103448,163.72010178117048 262.0689655172414,162.32485156912637 266.8965517241379,165.323155216285 271.7241379310345,167.66836301950806 276.55172413793105,169.15860899067005 281.37931034482756,168.49957591178963 286.2068965517241,167.56743002544528 291.0344827586207,167.6208651399491 295.8620689655172,166.72434266327394 300.6896551724138,166.1306191687871 305.51724137931035,164.96692111959288 310.3448275862069,164.21882951653944 315.17241379310343,161.73706530958438 320,159.94995759117896 324.82758620689657,158.8456318914334 329.6551724137931,157.3553859202714 334.48275862068965,155.00424088210346 339.3103448275862,155.00424088210346 344.13793103448273,153.50212044105172 348.9655172413793,150.07039864291772 353.7931034482759,150.94910941475825 358.62068965517244,155.74045801526717 363.44827586206895,160.50212044105172 368.2758620689655,159.13655640373196 373.1034482758621,163.14418999151823 377.9310344827586,164.12383375742152 382.7586206896552,162.95419847328242 387.58620689655174,160.79898218829516 392.41379310344826,161.32145886344358 397.2413793103448,160.87022900763358 402.0689655172414,154.82018659881254 406.8965517241379,156.62510602205256 411.7241379310345,155.48515691263782 416.55172413793105,154.87955894826123 421.37931034482756,154.65394402035622 426.2068965517241,157.2603901611535 431.0344827586207,157.10008481764206 435.86206896551727,156.11450381679387 440.6896551724138,151.92875318066154 445.51724137931035,146.7336726039016 450.3448275862069,150.98473282442745 455.17241379310343,149.74385072094995 460,115.92536047497877 464.82758620689657,114.42324003392703 469.6551724137931,114.67260390161151 474.48275862068965,111.78710771840541 479.3103448275862,108.08227311280744 484.13793103448273,107.51229855810007 488.9655172413793,112.08396946564883 493.7931034482759,110.62934690415605 498.62068965517244,110.09499575911788 503.44827586206895,89.4690415606446 508.2758620689655,85.06361323155214 513.1034482758621,86.32230703986427 517.9310344827586,84.06022052586937 522.7586206896551,77.90924512298557 527.5862068965517,79.12637828668362 532.4137931034483,75.54622561492789 537.2413793103449,72.12637828668363 542.0689655172414,74.12128922815944 546.8965517241379,72.29262086513994 551.7241379310344,73.02290076335876 556.551724137931,73.68193384223918 561.3793103448276,73.4503816793893 566.2068965517242,70.48176420695503 571.0344827586207,71.68108566581847 575.8620689655172,71.30703986429175 580.6896551724138,71.72264631043255 585.5172413793103,69.69804919423238 590.3448275862069,55.59711620016964 595.1724137931035,40 600,40.24936386768448" fill="none" stroke="#4d8de8" stroke-width="2.5"/>
+    <text x="592" y="26.24936386768448" style="font-size:15px;font-weight:700;text-anchor:end" fill="#eaf1ff">2312%</text>
+    <line x1="40" y1="177.53604749787957" x2="600" y2="177.53604749787957" stroke="#555" stroke-dasharray="3"/></svg></div>
+
+<div class="grid">
+  <div class="card">
+    <h2>By exit reason</h2>
+    <table><tr><th>Reason</th><th>N</th><th>WR</th><th>Mean P&L%</th></tr>
+      <tr><td>timestop</td><td>42</td><td>14.3%</td><td class="neg">-30.6%</td></tr><tr><td>trail</td><td>75</td><td>94.7%</td><td class="pos">+48.0%</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h2>By symbol</h2>
+    <table><tr><th>Sym</th><th>N</th><th>WR</th><th>Mean P&L%</th></tr>
+      <tr><td>IWM</td><td>24</td><td>62.5%</td><td class="pos">+8.6%</td></tr><tr><td>SPY</td><td>24</td><td>66.7%</td><td class="pos">+13.5%</td></tr><tr><td>QQQ</td><td>21</td><td>81.0%</td><td class="pos">+27.4%</td></tr><tr><td>AAPL</td><td>8</td><td>37.5%</td><td class="pos">+48.8%</td></tr><tr><td>META</td><td>8</td><td>50.0%</td><td class="pos">+31.8%</td></tr><tr><td>MSFT</td><td>8</td><td>75.0%</td><td class="pos">+19.2%</td></tr><tr><td>AMZN</td><td>7</td><td>71.4%</td><td class="pos">+24.8%</td></tr><tr><td>TSLA</td><td>6</td><td>83.3%</td><td class="pos">+54.4%</td></tr><tr><td>AVGO</td><td>4</td><td>50.0%</td><td class="neg">-15.6%</td></tr><tr><td>NVDA</td><td>4</td><td>50.0%</td><td class="neg">-5.1%</td></tr><tr><td>GOOGL</td><td>3</td><td>66.7%</td><td class="neg">-3.1%</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:1.5rem">
+  <h2>Today's trades (2)</h2>
+  <table><tr><th>Time</th><th>Symbol</th><th>Right</th><th>Strike</th><th>Reason</th><th>P&L%</th><th>P&L $</th></tr>
+    <tr><td>14:00</td><td>TSLA</td><td>P</td><td>375</td><td>trail</td><td class="pos">+262.7%</td><td class="pos">+$176.01</td></tr><tr><td>17:45</td><td>SPY</td><td>P</td><td>745</td><td>trail</td><td class="neg">-4.2%</td><td class="neg">-$6.01</td></tr>
+    </table>
+</div>
+
+<div class="card">
+  <h2>Daily rollup (last 20 active days)</h2>
+  <table><tr><th>Date</th><th>Trades</th><th>Wins</th><th>WR</th><th>Sum P&L%</th><th>Sum P&L $</th></tr>
+    <tr><td>2026-06-29<span class="badge">5 verified</span></td><td>5</td><td>3</td><td>60%</td><td class="pos">+88.8%</td><td class="pos">+$222.51</td></tr><tr><td>2026-06-30<span class="badge">3 verified</span></td><td>3</td><td>2</td><td>67%</td><td class="pos">+61.8%</td><td class="pos">+$74.83</td></tr><tr><td>2026-07-01<span class="badge">6 verified</span></td><td>6</td><td>3</td><td>50%</td><td class="pos">+88.8%</td><td class="pos">+$422.99</td></tr><tr><td>2026-07-02<span class="badge">2 verified</span></td><td>2</td><td>2</td><td>100%</td><td class="pos">+59.5%</td><td class="pos">+$81.20</td></tr><tr><td>2026-07-06<span class="badge">5 verified</span></td><td>5</td><td>2</td><td>40%</td><td class="neg">-111.0%</td><td class="neg">-$125.97</td></tr><tr><td>2026-07-07<span class="badge">11 verified</span></td><td>11</td><td>4</td><td>36%</td><td class="neg">-229.4%</td><td class="neg">-$889.69</td></tr><tr><td>2026-07-08</td><td>11</td><td>11</td><td>100%</td><td class="pos">+216.6%</td><td class="pos">+$316.18</td></tr><tr><td>2026-07-09</td><td>11</td><td>7</td><td>64%</td><td class="pos">+7.0%</td><td class="neg">-$59.04</td></tr><tr><td>2026-07-10</td><td>9</td><td>8</td><td>89%</td><td class="pos">+197.4%</td><td class="pos">+$361.91</td></tr><tr><td>2026-07-13</td><td>9</td><td>4</td><td>44%</td><td class="neg">-133.9%</td><td class="neg">-$1197.49</td></tr><tr><td>2026-07-14</td><td>11</td><td>8</td><td>73%</td><td class="pos">+115.2%</td><td class="pos">+$98.23</td></tr><tr><td>2026-07-15</td><td>18</td><td>14</td><td>78%</td><td class="pos">+1317.2%</td><td class="pos">+$1054.43</td></tr><tr><td>2026-07-16</td><td>13</td><td>7</td><td>54%</td><td class="pos">+138.3%</td><td class="neg">-$39.04</td></tr><tr><td>2026-07-17</td><td>1</td><td>1</td><td>100%</td><td class="pos">+237.5%</td><td class="pos">+$209.00</td></tr><tr><td>2026-07-20</td><td>2</td><td>1</td><td>50%</td><td class="pos">+258.5%</td><td class="pos">+$170.00</td></tr>
+  </table>
+</div>
+
+</body></html>

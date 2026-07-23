@@ -1,0 +1,12 @@
+const { IBApi, EventName } = require('@stoqey/ib');
+const HOST = '127.0.0.1', PORT = 4002, CID = Math.floor(Math.random()*9000)+1000;
+console.log(`connecting host=${HOST} port=${PORT} clientId=${CID}`);
+const ib = new IBApi({ host: HOST, port: PORT, clientId: CID });
+ib.on(EventName.connected, () => console.log('>>> CONNECTED'));
+ib.on(EventName.server, (v,t) => console.log('>>> SERVER v='+v+' t='+t));
+ib.on(EventName.managedAccounts, a => console.log('>>> ACCOUNTS: '+a));
+ib.on(EventName.nextValidId, id => console.log('>>> nextValidId='+id+' (handshake complete)'));
+ib.on(EventName.error, (e,code) => console.log('>>> ERROR code='+code+' msg='+(e&&e.message?e.message:e)));
+ib.on(EventName.disconnected, () => console.log('>>> DISCONNECTED'));
+ib.connect();
+setTimeout(()=>{console.log('--- 8s timeout ---');try{ib.disconnect();}catch(e){}process.exit(0);},8000);

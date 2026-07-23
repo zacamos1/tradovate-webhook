@@ -1,0 +1,329 @@
+
+#!/usr/bin/env python3
+"""
+vwap_signal_sender.py — Real-time VWAP reclaim/rejection signal generator
+==========================================================================
+
+Pulls live 5-minute bars from IBKR Gateway, evaluates the VWAP reclaim/
+rejection conditions at every bar close, and POSTs signals to the
+Tradovate webhook for execution.
+
+Signal logic (mirrors the backtested strategy exactly):
+  LONG  (reclaim): price below VWAP for 9+ consecutive bars → crosses above
+  SHORT (rejection): price above VWAP for 9+ consecutive bars → crosses below
+  Both require: volume ≥ 1.2× 20-bar average on the signal bar
+
+Usage:
+    # Run in loop (production):
+    python3 vwap_signal_sender.py --loop
+
+    # Single evaluation (test):
+    python3 vwap_signal_sender.py --once
+
+    # Dry run (log signals, no orders):
+    python3 vwap_signal_sender.py --loop --dry-run
+
+Config:
+    IBKR_HOST       = 127.0.0.1
+    IBKR_PORT       = 4002
+    WEBHOOK_URL     = http://localhost:3002/signal
+    INSTRUMENTS     = MNQ,MYM,MES       # focus on the proven instruments
+"""
+import argparse
+import json
+import os
+import sys
+import time
+import urllib.request
+import urllib.error
+from datetime import datetime, timezone
+
+import numpy as np
+import pandas as pd
+
+# ── Parameters (must match backtest exactly) ──────────────────────────────────
+MIN_BARS_AWAY   = 9      # min consecutive bars below/above VWAP
+VOL_MULT        = 1.5    # volume must be 1.5× 20-bar average
+ARM_POINTS      = 1.0
+TRAIL_POINTS    = 0.75
+STOP_MULT       = 7.0
+
+# Per-instrument overrides (validated Jul 19 2026 — see memory)
+STOP_MULT_OVERRIDE = {'MES': 6.0}
+TRAIL_POINTS_OVERRIDE = {'MES': 0.25}
+
+def get_stop_mult(symbol):
+    return STOP_MULT_OVERRIDE.get(symbol, STOP_MULT)
+
+def get_trail_points(symbol):
+    return TRAIL_POINTS_OVERRIDE.get(symbol, TRAIL_POINTS)
+BAR_SIZE        = '5 mins'
+DURATION        = '2 D'   # pull 2 days of bars to have enough VWAP history
+SESSION_EXCL_START = (23, 30)   # avoid near-close signals
+SESSION_EXCL_END   = (0, 5)
+
+# ── Instruments ────────────────────────────────────────────────────────────────
+# Format: (root, exchange, currency)
+INSTRUMENTS = [
+    ('MNQ', 'CME', 'USD'),
+    ('MYM', 'CBOT', 'USD'),
+    ('MES', 'CME', 'USD'),
+]
+
+# ── Webhook ───────────────────────────────────────────────────────────────────
+WEBHOOK_URL  = os.environ.get('VWAP_WEBHOOK_URL', 'http://localhost:3002/signal')
+LOG_FILE     = os.path.join(os.path.dirname(__file__), 'vwap_signals.jsonl')
+
+# ── Signal state (prevent re-firing on same bar) ──────────────────────────────
+last_signal = {}  # symbol → last signal bar timestamp
+
+
+def log(event, **kwargs):
+    entry = {'ts': datetime.now(timezone.utc).isoformat(), 'event': event, **kwargs}
+    print(json.dumps(entry), flush=True)
+    with open(LOG_FILE, 'a') as f:
+        f.write(json.dumps(entry) + '\n')
+
+
+def rma(s, n):
+    return s.ewm(alpha=1.0/n, adjust=False).mean()
+
+
+def atr_series(df, n=14):
+    tr = pd.concat([
+        df['High'] - df['Low'],
+        (df['High'] - df['Close'].shift()).abs(),
+        (df['Low']  - df['Close'].shift()).abs(),
+    ], axis=1).max(axis=1)
+    return rma(tr, n)
+
+
+def compute_features(df):
+    """Add VWAP, volume ratio, ATR, and consecutive bar counts."""
+    close, high, low, vol = df['Close'], df['High'], df['Low'], df['Volume']
+
+    # Daily VWAP (resets at midnight ET)
+    hlc3 = (high + low + close) / 3
+    dates = df.index.date
+    df['vwap'] = (hlc3 * vol).groupby(dates).cumsum() / \
+                  vol.groupby(dates).cumsum()
+
+    df['above_vwap'] = (close > df['vwap']).astype(int)
+
+    # Consecutive bars below VWAP
+    below = (1 - df['above_vwap'])
+    grp   = (below != below.shift()).cumsum()
+    df['consec_below'] = below.groupby(grp).cumcount() + 1
+    df['consec_below'] = df['consec_below'].where(below == 1, 0)
+
+    # Consecutive bars above VWAP
+    above = df['above_vwap'].copy()
+    grp2  = (above != above.shift()).cumsum()
+    df['consec_above'] = above.groupby(grp2).cumcount() + 1
+    df['consec_above'] = df['consec_above'].where(above == 1, 0)
+
+    # Volume confirmation
+    df['vol_ma']    = vol.rolling(20).mean()
+    df['vol_ratio'] = vol / df['vol_ma']
+
+    # ATR for stop sizing
+    df['atr'] = atr_series(df, 14)
+
+    # Transitions
+    df['reclaim']   = (df['above_vwap'] == 1) & (df['above_vwap'].shift(1) == 0)
+    df['rejection'] = (df['above_vwap'] == 0) & (df['above_vwap'].shift(1) == 1)
+
+    return df
+
+
+def session_ok(ts):
+    """Return False during near-close window."""
+    h, m = ts.hour, ts.minute
+    hhmm = h * 100 + m
+    if hhmm >= 2330 or hhmm < 5:
+        return False
+    return True
+
+
+def evaluate_signals(df, symbol):
+    """Check the most recent completed bar for signals."""
+    if len(df) < 30:
+        return []
+
+    df = compute_features(df.copy())
+    # Use the last completed bar (not the current forming bar)
+    row = df.iloc[-2]
+    ts  = df.index[-2]
+
+    if not session_ok(ts):
+        return []
+
+    # Dedup: don't re-fire on same bar
+    bar_key = f"{symbol}_{ts}"
+    if last_signal.get(symbol) == bar_key:
+        return []
+
+    signals = []
+
+    # LONG: reclaim after 9+ bars below VWAP
+    if row['reclaim']:
+        bars_below = df['consec_below'].shift(1).iloc[-2]
+        if bars_below >= MIN_BARS_AWAY and row['vol_ratio'] >= VOL_MULT:
+            signals.append({
+                'symbol':      symbol,
+                'action': 'buy',
+                'direction':   'long',
+                'signal_type': 'reclaim',
+                'entry_price': float(row['Close']),
+                'atr_at_entry': float(row['atr']),
+                'vwap':        float(row['vwap']),
+                'bars_away':   int(bars_below),
+                'vol_ratio':   round(float(row['vol_ratio']), 2),
+                'bar_ts':      str(ts),
+            })
+
+    # SHORT: rejection after 9+ bars above VWAP
+    if row['rejection']:
+        bars_above = df['consec_above'].shift(1).iloc[-2]
+        if bars_above >= MIN_BARS_AWAY and row['vol_ratio'] >= VOL_MULT:
+            signals.append({
+                'symbol':      symbol,
+                'action': 'sell',
+                'direction':   'short',
+                'signal_type': 'rejection',
+                'entry_price': float(row['Close']),
+                'atr_at_entry': float(row['atr']),
+                'vwap':        float(row['vwap']),
+                'bars_away':   int(bars_above),
+                'vol_ratio':   round(float(row['vol_ratio']), 2),
+                'bar_ts':      str(ts),
+            })
+
+    if signals:
+        last_signal[symbol] = bar_key
+
+    return signals
+
+
+def post_signal(signal, dry_run=False):
+    """POST signal to Tradovate webhook."""
+    if dry_run:
+        log('signal_dry_run', **signal)
+        return True
+    try:
+        payload = json.dumps(signal).encode()
+        req = urllib.request.Request(
+            WEBHOOK_URL, data=payload,
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            result = json.loads(resp.read())
+            log('signal_posted', **signal, response=result)
+            return True
+    except Exception as e:
+        log('signal_post_error', **signal, error=str(e))
+        return False
+
+
+def pull_bars_ibkr(root, exchange, currency):
+    """Pull recent 5-min bars from IBKR Gateway."""
+    from ib_insync import IB, ContFuture, util
+    ib = IB()
+    try:
+        ib.connect('127.0.0.1', 4002, clientId=55, timeout=15)
+
+        # ContFuture resolves to the current front-month contract automatically
+        # (the old Future('') with blank expiry was ambiguous across 5 live
+        # expiries and threw Error 321 every time)
+        contract = ContFuture(root, exchange, currency=currency)
+        ib.qualifyContracts(contract)
+
+        bars = ib.reqHistoricalData(
+            contract, endDateTime='', durationStr=DURATION,
+            barSizeSetting=BAR_SIZE, whatToShow='TRADES',
+            useRTH=False, formatDate=2)
+
+        df = util.df(bars)
+        df = df.rename(columns={'open':'Open','high':'High','low':'Low',
+                                  'close':'Close','volume':'Volume'})
+        df['date'] = pd.to_datetime(df['date'], utc=True)
+        df = df.set_index('date')[['Open','High','Low','Close','Volume']]
+        df.index = df.index.tz_convert('America/New_York')
+        return df
+    except Exception as e:
+        log('ibkr_pull_error', root=root, error=str(e))
+        return None
+    finally:
+        # ALWAYS disconnect, even on failure — the old code only disconnected
+        # on success, which left clientId=55 orphaned/connected after any
+        # error and caused every subsequent call to fail with
+        # "clientId 55 already in use"
+        if ib.isConnected():
+            ib.disconnect()
+
+
+def run_once(dry_run=False):
+    """Single evaluation pass across all instruments."""
+    log('evaluation_start', instruments=[i[0] for i in INSTRUMENTS])
+    total_signals = 0
+    for root, exchange, currency in INSTRUMENTS:
+        df = pull_bars_ibkr(root, exchange, currency)
+        if df is None or len(df) < 30:
+            log('bars_unavailable', symbol=root)
+            continue
+        signals = evaluate_signals(df, root)
+        for sig in signals:
+            log('signal_detected', **sig)
+            post_signal(sig, dry_run=dry_run)
+            total_signals += 1
+    log('evaluation_done', signals_fired=total_signals)
+    return total_signals
+
+
+def run_loop(dry_run=False):
+    """Run evaluation loop, waking 25 seconds after each 5-min bar close."""
+    log('loop_start', dry_run=dry_run)
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            # Wake 25 seconds after each 5-min bar close
+            secs_into_bar = (now.minute % 5) * 60 + now.second
+            if secs_into_bar < 25:
+                # Just passed a bar close — evaluate now
+                run_once(dry_run=dry_run)
+                # Sleep to avoid re-evaluating same bar
+                sleep_secs = 25 - secs_into_bar + 1
+            else:
+                # Wait for next bar close
+                secs_to_next = (5 * 60) - secs_into_bar + 24
+                sleep_secs   = secs_to_next
+
+            log('next_eval_in', seconds=int(sleep_secs))
+            time.sleep(sleep_secs)
+        except KeyboardInterrupt:
+            log('loop_stopped')
+            break
+        except Exception as e:
+            log('loop_error', error=str(e))
+            time.sleep(30)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--loop',    action='store_true', help='Run continuously')
+    ap.add_argument('--once',    action='store_true', help='Single evaluation')
+    ap.add_argument('--dry-run', action='store_true', help='Log signals, no orders')
+    a = ap.parse_args()
+
+    if not a.loop and not a.once:
+        a.loop = True  # default to loop
+
+    if a.once:
+        run_once(dry_run=a.dry_run)
+    else:
+        run_loop(dry_run=a.dry_run)
+
+
+if __name__ == '__main__':
+    main()

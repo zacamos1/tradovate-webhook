@@ -1,0 +1,400 @@
+          entryPrice:
+            Number(sig.entry_price ?? sig.price) || null,
+          signalType:
+            sig.signal_type ||
+            sig.reason ||
+            requestedAction ||
+            null,
+        };
+
+        log('signal_received', runtimeState.lastSignal);
+
+        // Harmless connectivity test
+        if (requestedAction === 'TEST') {
+          log('test_signal_received', {
+            strategy: sig.strategy || null,
+            symbol: symbol || null,
+            source: 'tradingview'
+          });
+
+          return send(200, {
+            ok: true,
+            test: true,
+            brokerOrderPlaced: false,
+            account: CFG.account,
+            message: 'TradingView webhook path is working'
+          });
+        }
+
+        if (!symbol) {
+          return send(400, {
+            ok: false,
+            error: 'Missing symbol'
+          });
+        }
+
+        if (
+          !['MES', 'MNQ', 'MYM'].includes(symbol)
+        ) {
+          log('signal_rejected_symbol', {
+            symbol,
+            requestedAction
+          });
+
+          return send(400, {
+            ok: false,
+            error: 'Unsupported symbol',
+            allowedSymbols: ['MES', 'MNQ', 'MYM']
+          });
+        }
+
+        // TradingView-controlled exits
+        if (
+          requestedAction === 'EXIT_LONG' ||
+          requestedAction === 'EXIT_SHORT'
+        ) {
+          const exitDirection =
+            requestedAction === 'EXIT_LONG' ? 'long' : 'short';
+
+          const exitKey = posKey(symbol, exitDirection);
+          const existingPos = positions[exitKey];
+
+          if (!existingPos) {
+            log('exit_skipped_no_internal_position', {
+              symbol,
+              requestedAction,
+              reason: sig.reason || null
+            });
+
+            return send(200, {
+              ok: false,
+              reason: 'No matching internal position',
+              symbol,
+              action: requestedAction
+            });
+          }
+
+          const exitAction =
+            exitDirection === 'long' ? 'Sell' : 'Buy';
+
+          const exitQty =
+            existingPos.qty || 1;
+
+          const exitOrder =
+            await placeOrder(
+              symbol,
+              exitAction,
+              exitQty
+            );
+
+          const exitFailed =
+            !exitOrder ||
+            !exitOrder.orderId ||
+            exitOrder.failureReason;
+
+          if (exitFailed) {
+            log('exit_order_rejected', {
+              symbol,
+              requestedAction,
+              order: exitOrder
+            });
+
+            return send(200, {
+              ok: false,
+              reason: 'Exit rejected by broker',
+              order: exitOrder
+            });
+          }
+
+          const referencePrice =
+            Number.isFinite(Number(sig.price))
+              ? Number(sig.price)
+              : null;
+
+          if (referencePrice !== null) {
+            const pnlPoints =
+              exitDirection === 'long'
+                ? referencePrice - existingPos.entryPrice
+                : existingPos.entryPrice - referencePrice;
+
+            recordEstimatedRealized(
+              symbol,
+              pnlPoints,
+              existingPos.qty || 1
+            );
+          }
+
+          log('position_closed_by_tradingview', {
+            key: exitKey,
+            symbol,
+            direction: exitDirection,
+            reason: sig.reason || 'TRADINGVIEW_EXIT',
+            entryPrice: existingPos.entryPrice,
+            referencePrice,
+            orderId: exitOrder.orderId
+          });
+
+          delete positions[exitKey];
+          persistAllState();
+
+          ntfyPush(
+            `EXIT: ${symbol} ${exitDirection.toUpperCase()}`,
+            `Reason: ${sig.reason || 'TRADINGVIEW_EXIT'}
+Order ID: ${exitOrder.orderId}`,
+            'default',
+            'checkered_flag'
+          );
+
+          return send(200, {
+            ok: true,
+            action: requestedAction,
+            orderId: exitOrder.orderId,
+            flattened: true
+          });
+        }
+
+        // Entry commands
+        const isEntryAction =
+          requestedAction === 'ENTER_LONG' ||
+          requestedAction === 'ENTER_SHORT';
+
+        if (isEntryAction && !startupReady) {
+          log('signal_rejected_startup_not_ready', {
+            symbol,
+            requestedAction,
+          });
+
+          return send(503, {
+            ok: false,
+            reason: 'Server startup is not complete'
+          });
+        }
+
+        if (
+          isEntryAction &&
+          reconciliationState.safetyLock
+        ) {
+          log('signal_rejected_reconciliation_lock', {
+            symbol,
+            requestedAction,
+            lastError:
+              reconciliationState.lastError,
+            mismatches:
+              reconciliationState.mismatches,
+          });
+
+          return send(200, {
+            ok: false,
+            reason:
+              'New entries blocked by position reconciliation safety lock'
+          });
+        }
+
+        if (isEntryAction && runtimeState.paused) {
+          log('signal_rejected_paused', {
+            symbol,
+            requestedAction
+          });
+
+          return send(200, {
+            ok: false,
+            reason: 'Trading is paused'
+          });
+        }
+
+        if (
+          isEntryAction &&
+          !runtimeState.entriesEnabled
+        ) {
+          log('signal_rejected_entries_disabled', {
+            symbol,
+            requestedAction
+          });
+
+          return send(200, {
+            ok: false,
+            reason: 'New entries are disabled'
+          });
+        }
+
+        resetDailyStateIfNeeded();
+
+        if (
+          isEntryAction &&
+          runtimeState.daily.trades >= CFG.maxDailyTrades
+        ) {
+          log('signal_rejected_daily_trade_limit', {
+            symbol,
+            requestedAction,
+            trades: runtimeState.daily.trades,
+            maxDailyTrades: CFG.maxDailyTrades,
+          });
+
+          return send(200, {
+            ok: false,
+            reason: 'Maximum daily trades reached'
+          });
+        }
+
+        if (isEntryAction && !qtyIsValid) {
+          log('signal_rejected_quantity', {
+            symbol,
+            requestedQty,
+            maxContracts: CFG.maxContracts,
+          });
+
+          return send(400, {
+            ok: false,
+            error: 'Invalid quantity',
+            minContracts: 1,
+            maxContracts: CFG.maxContracts,
+          });
+        }
+
+        if (isEntryAction) {
+          const fingerprint =
+            duplicateFingerprint(
+              sig,
+              symbol,
+              requestedAction
+            );
+
+          if (isDuplicateSignal(fingerprint)) {
+            log('signal_rejected_duplicate', {
+              symbol,
+              requestedAction,
+              duplicateWindowSeconds:
+                CFG.duplicateWindowSeconds,
+            });
+
+            return send(200, {
+              ok: false,
+              reason: 'Duplicate signal'
+            });
+          }
+        }
+
+        let direction = sig.direction;
+        const entry_price = Number(sig.entry_price ?? sig.price);
+        const atr_at_entry = Number(sig.atr_at_entry ?? sig.atr ?? 1);
+        const signal_type =
+          sig.signal_type ||
+          sig.reason ||
+          requestedAction;
+
+        if (requestedAction === 'ENTER_LONG') {
+          direction = 'long';
+        }
+
+        if (requestedAction === 'ENTER_SHORT') {
+          direction = 'short';
+        }
+
+        if (
+          !['long', 'short'].includes(direction) ||
+          !Number.isFinite(entry_price) ||
+          entry_price <= 0
+        ) {
+          return send(400, {
+            ok: false,
+            error: 'Invalid entry payload',
+            expectedActions: [
+              'TEST',
+              'ENTER_LONG',
+              'ENTER_SHORT',
+              'EXIT_LONG',
+              'EXIT_SHORT'
+            ]
+          });
+        }
+
+        const key = posKey(symbol, direction);
+        if (positions[key]) {
+          log('signal_skipped_busy', { key });
+          return send(200, { ok: false, reason: 'position already open' });
+        }
+
+        // Place the entry order
+        const action = direction === 'long' ? 'Buy' : 'Sell';
+        const order  = await placeOrder(symbol, action, qty);
+
+        // BUG FIX: only record an open position if the broker actually
+        // confirmed the fill. Previously this ran unconditionally, so a
+        // rejected order (e.g. the "Access is denied" case) still created
+        // internal position-tracking state for a position that was never
+        // actually opened -- a phantom position the exit-management logic
+        // would then try to manage against a real broker state that didn't
+        // exist.
+        const orderFailed = !order || !order.orderId || order.failureReason;
+        if (orderFailed) {
+          log('signal_order_rejected', { symbol, direction, signal_type, entry_price, order });
+          return send(200, { ok: false, reason: 'order rejected by broker', order });
+        }
+
+        openPosition(
+          symbol,
+          direction,
+          entry_price,
+          atr_at_entry,
+          new Date().toISOString(),
+          qty
+        );
+
+        runtimeState.daily.trades += 1;
+        persistRuntime();
+
+        log('signal_accepted', {
+          symbol,
+          direction,
+          signal_type,
+          entry_price,
+          atr_at_entry,
+          qty,
+          dailyTrades: runtimeState.daily.trades
+        });
+        return send(200, { ok: true, orderId: order.orderId });
+      } catch (e) {
+        log('signal_error', { error: e.message });
+        return send(500, { error: e.message });
+      }
+    });
+    return;
+  }
+
+  send(404, { error: 'Not found' });
+});
+
+// ── Position monitor interval ─────────────────────────────────────────────────
+setInterval(checkPositions, 5000);
+
+setInterval(
+  () => reconcilePositions('interval'),
+  CFG.reconcileSeconds * 1000
+);
+
+// ── Startup ───────────────────────────────────────────────────────────────────
+server.listen(CFG.port, async () => {
+  log('server_start', {
+    port: CFG.port,
+    account: CFG.account
+  });
+
+  try {
+    loadPersistedState();
+    resetDailyStateIfNeeded();
+
+    await authenticate();
+    await resolveAccount();
+    await reconcilePositions('startup');
+
+    startupReady = true;
+
+    log('ready', {
+      accountId,
+      restoredPositions:
+        Object.keys(positions).length,
+      safetyLock:
+        reconciliationState.safetyLock,
+    });
+  } catch (e) {
+    reconciliationState.safetyLock = true;

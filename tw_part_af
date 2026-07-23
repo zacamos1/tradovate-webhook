@@ -1,0 +1,11 @@
+    reconciliationState.lastError = e.message;
+    startupReady = true;
+
+    persistAllState();
+
+    log('startup_error', {
+      error: e.message,
+      safetyLock: true,
+    });
+  }
+});

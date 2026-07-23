@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Cumulative System Comparison</title>
+<style>
+body { font-family: Arial; background: #111; color: #0f0; padding: 20px; }
+table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+th, td { border: 1px solid #0f0; padding: 10px; text-align: left; }
+th { background: #222; }
+.positive { color: lime; }
+.negative { color: red; }
+</style>
+</head>
+<body>
+<h1>Cumulative System Comparison (as of July 17 2026)</h1>
+
+<table>
+<tr><th>System</th><th>Trades</th><th>Armed %</th><th>Mean P&L (sim)</th><th>Live Est.</th><th>Notes</th></tr>
+<tr><td>Current Live</td><td>114</td><td>~60%</td><td class="negative">-$5.6</td><td class="positive">+$1.4k-1.7k</td><td>TV alerts</td></tr>
+<tr><td>Pruned (no AVGO/TSLA/GOOGL)</td><td>460</td><td>63%</td><td class="negative">-$0.4</td><td class="positive">Better</td><td>Best so far</td></tr>
+<tr><td>New v2 (score 60)</td><td>367</td><td>TBD</td><td>TBD</td><td>TBD</td><td>Stricter, ready</td></tr>
+<tr><td>New v2 (score 50)</td><td>379</td><td>TBD</td><td>TBD</td><td>TBD</td><td>More volume</td></tr>
+</table>
+
+<p>Top Tickers: QQQ, AMZN, NVDA</p>
+<p>Shadow: Running - Fidelity tracking active</p>
+<p>Status: Data Collection Phase - Positive edge on winners</p>
+</body>
+</html>
