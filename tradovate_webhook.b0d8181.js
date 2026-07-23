@@ -1391,39 +1391,6 @@ const server = http.createServer(async (req, res) => {
 
   if (
     req.method === 'GET' &&
-
-// -----------------------------------------------------------------------------
-// LIVE ACCOUNT SUMMARY
-// -----------------------------------------------------------------------------
-if (
-  req.method === 'GET' &&
-  requestUrl.pathname === '/account'
-) {
-  const openPositions = Object.keys(positions || {}).length;
-
-  const workingOrders =
-    Object.values(positions || {}).reduce(
-      (n, p) => n + (p.tpId ? 1 : 0) + (p.slId ? 1 : 0),
-      0
-    );
-
-  const openPnL =
-    Object.values(positions || {}).reduce(
-      (sum, p) => sum + (Number(p.unrealizedPnL) || 0),
-      0
-    );
-
-  return send(200, {
-    ok: true,
-    broker: "Tradovate",
-    openPositions,
-    workingOrders,
-    openPnL,
-    timestamp: new Date().toISOString()
-  });
-}
-
-
     requestUrl.pathname === '/status'
   ) {
     return send(200, {

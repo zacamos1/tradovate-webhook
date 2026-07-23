@@ -290,3 +290,13 @@
 {"ts":"2026-07-23T12:18:58.127Z","event":"ready","accountId":47446775,"restoredPositions":0,"safetyLock":false}
 {"ts":"2026-07-23T12:19:57.955Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
 {"ts":"2026-07-23T12:20:57.952Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
+{"ts":"2026-07-23T12:21:57.950Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
+{"ts":"2026-07-23T12:22:57.957Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
+{"ts":"2026-07-23T12:23:57.958Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
+{"ts":"2026-07-23T12:24:57.956Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
+{"ts":"2026-07-23T12:25:57.954Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
+{"ts":"2026-07-23T12:26:57.953Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
+{"ts":"2026-07-23T12:27:57.954Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
+{"ts":"2026-07-23T12:28:57.959Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
+{"ts":"2026-07-23T12:29:57.960Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
+{"ts":"2026-07-23T12:30:57.957Z","event":"position_reconciliation_complete","source":"interval","brokerPositions":[],"internalPositions":[],"mismatches":[],"safetyLock":false}
