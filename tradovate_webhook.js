@@ -859,6 +859,188 @@ async function getBrokerPositions() {
   return result;
 }
 
+
+async function getLiveAccountSummary() {
+  const token = await authenticate();
+  const acctId = await resolveAccount();
+
+  const [accountsResult, cashResult, positionsResult, ordersResult] =
+    await Promise.allSettled([
+      tvGet('/account/list', token),
+      tvGet(
+        '/cashBalance/getcashbalancesnapshot?accountId=' +
+        encodeURIComponent(acctId),
+        token
+      ),
+      tvGet('/position/list', token),
+      tvGet('/order/list', token),
+    ]);
+
+  const accounts =
+    accountsResult.status === 'fulfilled' &&
+    Array.isArray(accountsResult.value)
+      ? accountsResult.value
+      : [];
+
+  const account =
+    accounts.find(item =>
+      Number(item.id) === Number(acctId)
+    ) || null;
+
+  const cashSnapshot =
+    cashResult.status === 'fulfilled' &&
+    cashResult.value &&
+    typeof cashResult.value === 'object' &&
+    !Array.isArray(cashResult.value)
+      ? cashResult.value
+      : null;
+
+  const brokerPositions =
+    positionsResult.status === 'fulfilled' &&
+    Array.isArray(positionsResult.value)
+      ? positionsResult.value.filter(position =>
+          Number(position.accountId) === Number(acctId) &&
+          Number(position.netPos || 0) !== 0
+        )
+      : [];
+
+  const allOrders =
+    ordersResult.status === 'fulfilled' &&
+    Array.isArray(ordersResult.value)
+      ? ordersResult.value.filter(order =>
+          Number(order.accountId) === Number(acctId)
+        )
+      : [];
+
+  const workingStatuses = new Set([
+    'Working',
+    'PendingNew',
+    'PendingReplace',
+    'Submitted',
+    'Accepted',
+    'Suspended',
+  ]);
+
+  const workingOrders = allOrders.filter(order =>
+    workingStatuses.has(String(order.ordStatus || order.status || ''))
+  );
+
+  const endpointErrors = {};
+
+  if (accountsResult.status === 'rejected') {
+    endpointErrors.accounts = accountsResult.reason?.message ||
+      String(accountsResult.reason);
+  }
+
+  if (cashResult.status === 'rejected') {
+    endpointErrors.cashBalance = cashResult.reason?.message ||
+      String(cashResult.reason);
+  }
+
+  if (positionsResult.status === 'rejected') {
+    endpointErrors.positions = positionsResult.reason?.message ||
+      String(positionsResult.reason);
+  }
+
+  if (ordersResult.status === 'rejected') {
+    endpointErrors.orders = ordersResult.reason?.message ||
+      String(ordersResult.reason);
+  }
+
+  const numberOrNull = value => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  return {
+    account: {
+      id: acctId,
+      name: account?.name || CFG.account,
+      active: account?.active ?? null,
+      accountType:
+        account?.accountType ||
+        account?.type ||
+        null,
+    },
+
+    balances: {
+      cashBalance: numberOrNull(
+        cashSnapshot?.totalCashValue ??
+        cashSnapshot?.cashUSD ??
+        account?.cashBalance
+      ),
+      netLiquidatingValue: numberOrNull(
+        cashSnapshot?.netLiq ??
+        cashSnapshot?.netLiquidatingValue ??
+        cashSnapshot?.netLiqValue
+      ),
+      openPnL: numberOrNull(
+        cashSnapshot?.openPnL ??
+        cashSnapshot?.unrealizedPnL
+      ),
+      realizedPnL: numberOrNull(
+        cashSnapshot?.realizedPnL
+      ),
+      totalPnL: numberOrNull(
+        cashSnapshot?.totalPnL
+      ),
+      initialMargin: numberOrNull(
+        cashSnapshot?.initialMargin
+      ),
+      maintenanceMargin: numberOrNull(
+        cashSnapshot?.maintenanceMargin
+      ),
+      availableFunds: numberOrNull(
+        cashSnapshot?.currencyCashAvailWithdrawalUSD ??
+        cashSnapshot?.availableFunds ??
+        cashSnapshot?.buyingPower
+      ),
+    },
+
+    positions: brokerPositions.map(position => ({
+      contractId: position.contractId || null,
+      symbol:
+        position.contractName ||
+        position.symbol ||
+        null,
+      netPosition: numberOrNull(position.netPos),
+      averagePrice: numberOrNull(
+        position.netPrice ??
+        position.avgPrice ??
+        position.averagePrice
+      ),
+    })),
+
+    workingOrders: workingOrders.map(order => ({
+      orderId: order.id || order.orderId || null,
+      contractId: order.contractId || null,
+      action: order.action || null,
+      quantity: numberOrNull(
+        order.orderQty ??
+        order.quantity
+      ),
+      filledQuantity: numberOrNull(
+        order.cumQty ??
+        order.filledQty
+      ),
+      orderType: order.orderType || null,
+      status: order.ordStatus || order.status || null,
+      price: numberOrNull(order.price),
+      stopPrice: numberOrNull(order.stopPrice),
+    })),
+
+    reconciliation: {
+      safetyLock: reconciliationState.safetyLock,
+      lastRunTs: reconciliationState.lastRunTs,
+      lastSuccessTs: reconciliationState.lastSuccessTs,
+      lastError: reconciliationState.lastError,
+      mismatches: reconciliationState.mismatches,
+    },
+
+    endpointErrors,
+  };
+}
+
 function createReconciledPosition(brokerPosition) {
   const key = posKey(
     brokerPosition.symbol,
@@ -1423,40 +1605,37 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---------------------------------------------------------------------------
-  // LIVE ACCOUNT SUMMARY
+  // LIVE BROKER ACCOUNT SUMMARY
   // ---------------------------------------------------------------------------
   if (
     req.method === 'GET' &&
     requestUrl.pathname === '/account'
   ) {
-    const openPositions =
-      Object.keys(positions || {}).length;
+    try {
+      const summary = await getLiveAccountSummary();
 
-    const workingOrders =
-      Object.values(positions || {}).reduce(
-        (n, p) =>
-          n +
-          (p.tpId ? 1 : 0) +
-          (p.slId ? 1 : 0),
-        0
-      );
+      return send(200, {
+        ok: true,
+        broker: 'Tradovate',
+        environment:
+          CFG.baseUrl.includes('demo')
+            ? 'demo'
+            : 'live',
+        ...summary,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      log('account_summary_error', {
+        error: error.message,
+      });
 
-    const openPnL =
-      Object.values(positions || {}).reduce(
-        (sum, p) =>
-          sum +
-          (Number(p.unrealizedPnL) || 0),
-        0
-      );
-
-    return send(200, {
-      ok: true,
-      broker: 'Tradovate',
-      openPositions,
-      workingOrders,
-      openPnL,
-      timestamp: new Date().toISOString(),
-    });
+      return send(503, {
+        ok: false,
+        broker: 'Tradovate',
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 
   if (
