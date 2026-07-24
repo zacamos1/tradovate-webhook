@@ -60,3 +60,23 @@ directional_dashboards/latest.html
 *.20*.js
 .env
 .env.*
+
+# Operational directories
+logs/*
+!logs/.gitkeep
+backups/*
+!backups/.gitkeep
+
+# Environment backups and temporary files
+.env*
+*.bak
+*.bak.*
+*.backup
+*.backup.*
+*.zip
+*.patch
+
+# Research data and generated analysis
+*.parquet
+calibration_quotes/
+outcome_quotes/
