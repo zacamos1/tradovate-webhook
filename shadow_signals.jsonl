@@ -1,2 +1,0 @@
-{"logged_at": "2026-07-20T13:45:34.167468-04:00", "signal_ts_et": "2026-07-20T13:45:00-04:00", "symbol": "SPY", "side": "P", "engine": "scout", "score": 45, "underlying_close": 743.76, "source": "ibkr"}
-{"logged_at": "2026-07-20T13:45:34.167468-04:00", "signal_ts_et": "2026-07-20T14:00:00-04:00", "symbol": "SPY", "side": "P", "engine": "scout", "score": 45, "underlying_close": 743.87, "source": "ibkr"}

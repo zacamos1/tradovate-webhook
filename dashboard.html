@@ -1,28 +1,122 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-<title>Trading Dashboard - July 17 2026</title>
+<meta charset="utf-8">
+<title>Tradovate Dashboard</title>
+
 <style>
-body { font-family: Arial; background: #111; color: #0f0; padding: 20px; }
-h1 { color: #0f0; }
-table { border-collapse: collapse; width: 100%; }
-th, td { border: 1px solid #0f0; padding: 8px; text-align: left; }
+body{
+    margin:0;
+    background:#111;
+    color:#eee;
+    font-family:Arial,Helvetica,sans-serif;
+}
+.header{
+    background:#1d1d1d;
+    padding:18px;
+    font-size:28px;
+    font-weight:bold;
+}
+.grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:16px;
+    padding:20px;
+}
+.card{
+    background:#222;
+    border-radius:10px;
+    padding:18px;
+    box-shadow:0 0 10px rgba(0,0,0,.35);
+}
+.label{
+    color:#888;
+    font-size:14px;
+}
+.value{
+    font-size:36px;
+    margin-top:8px;
+}
+.footer{
+    padding:20px;
+    color:#888;
+}
+.online{
+    color:#55ff55;
+}
 </style>
+
 </head>
+
 <body>
-<h1>Trading System Dashboard</h1>
-<p>Live: 114 trades (+$1.4k–1.7k realistic)</p>
-<p>Today: QQQ C trail +237.5%</p>
-<p>Shadow: Running (0 recent signals - quiet day)</p>
-<p>New v2 Engine: Ready (367 signals)</p>
-<p>Best Tweak: Pruned set (near breakeven in sim)</p>
-<table>
-<tr><th>Ticker</th><th>Mean P&L (sim)</th></tr>
-<tr><td>QQQ</td><td>+5.3</td></tr>
-<tr><td>AMZN</td><td>+11.7</td></tr>
-<tr><td>NVDA</td><td>+8.3</td></tr>
-<!-- add more from latest sim -->
-</table>
-<p>System Status: Stable - Data Collection Phase</p>
+
+<div class="header">
+Tradovate Auto Trader
+<span class="online" id="status">● ONLINE</span>
+</div>
+
+<div class="grid">
+
+<div class="card">
+<div class="label">Signals Today</div>
+<div class="value" id="signals">-</div>
+</div>
+
+<div class="card">
+<div class="label">Accepted</div>
+<div class="value" id="accepted">-</div>
+</div>
+
+<div class="card">
+<div class="label">Acceptance Rate</div>
+<div class="value" id="rate">-</div>
+</div>
+
+<div class="card">
+<div class="label">Orders</div>
+<div class="value" id="orders">-</div>
+</div>
+
+<div class="card">
+<div class="label">Open Positions</div>
+<div class="value" id="open">-</div>
+</div>
+
+<div class="card">
+<div class="label">Closed Today</div>
+<div class="value" id="closed">-</div>
+</div>
+
+</div>
+
+<div class="footer">
+Last Refresh:
+<span id="refresh">never</span>
+</div>
+
+<script>
+
+async function refresh(){
+
+    const r=await fetch('/analytics');
+    const j=await r.json();
+
+    document.getElementById('signals').innerText=j.today.signals;
+    document.getElementById('accepted').innerText=j.today.accepted;
+    document.getElementById('rate').innerText=j.acceptanceRate+"%";
+    document.getElementById('orders').innerText=j.orders;
+    document.getElementById('open').innerText=j.today.opened-j.today.closed;
+    document.getElementById('closed').innerText=j.today.closed;
+
+    document.getElementById('refresh').innerText=
+        new Date().toLocaleTimeString();
+
+}
+
+refresh();
+setInterval(refresh,5000);
+
+</script>
+
 </body>
 </html>

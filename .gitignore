@@ -1,0 +1,62 @@
+# Environment
+.env
+.env.*
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Logs
+*.log
+*.out
+*.err
+
+# Runtime JSONL / state
+*.jsonl
+state/*.json
+
+# Runtime dashboards
+dashboards/latest.*
+directional_dashboards/latest.*
+
+# Daily generated dashboards
+dashboards/*.html
+dashboards/*.md
+directional_dashboards/*.html
+
+# Research outputs
+*.csv
+
+# Zip / backups
+*.zip
+*.bak*
+*.backup.*
+*.old
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime logs
+trades.log
+settle.log
+*_push.log
+
+# Runtime state
+watchdog_state.json
+fly_legs_today.json
+
+# Generated dashboards
+dashboards/latest.html
+directional_dashboards/latest.html
+
+# Timestamped local backups
+*.20*.js
+.env
+.env.*

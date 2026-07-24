@@ -113,6 +113,107 @@
         </article>
       </section>
 
+      <section class="card account-card">
+        <div class="card-title-row">
+          <div>
+            <div class="section-label">LIVE BROKER ACCOUNT</div>
+            <h3>Tradovate Account Snapshot</h3>
+          </div>
+
+          <span id="accountFreshnessBadge" class="badge neutral">
+            Loading
+          </span>
+        </div>
+
+        <div class="account-metric-grid">
+          <div class="account-metric">
+            <span>Cash Balance</span>
+            <strong id="cashBalance">--</strong>
+          </div>
+
+          <div class="account-metric">
+            <span>Net Liquidation</span>
+            <strong id="netLiquidatingValue">--</strong>
+          </div>
+
+          <div class="account-metric">
+            <span>Available Funds</span>
+            <strong id="availableFunds">--</strong>
+          </div>
+
+          <div class="account-metric">
+            <span>Realized P&amp;L</span>
+            <strong id="brokerRealizedPnl">--</strong>
+          </div>
+
+          <div class="account-metric">
+            <span>Open P&amp;L</span>
+            <strong id="brokerOpenPnl">--</strong>
+          </div>
+
+          <div class="account-metric">
+            <span>Total P&amp;L</span>
+            <strong id="brokerTotalPnl">--</strong>
+          </div>
+
+          <div class="account-metric">
+            <span>Initial Margin</span>
+            <strong id="initialMargin">--</strong>
+          </div>
+
+          <div class="account-metric">
+            <span>Maintenance Margin</span>
+            <strong id="maintenanceMargin">--</strong>
+          </div>
+        </div>
+
+        <div class="account-meta">
+          <span id="accountEnvironment">Environment: --</span>
+          <span id="accountSnapshotTime">Snapshot: --</span>
+          <span id="accountEndpointState">Broker endpoints: --</span>
+        </div>
+      </section>
+
+      <section class="broker-grid">
+        <article class="card">
+          <div class="card-title-row">
+            <div>
+              <div class="section-label">BROKER POSITIONS</div>
+              <h3>Tradovate Open Positions</h3>
+            </div>
+
+            <span id="brokerPositionsBadge" class="badge neutral">
+              0 positions
+            </span>
+          </div>
+
+          <div id="brokerPositionsContainer" class="broker-list">
+            <div class="empty-state">
+              No broker positions.
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-title-row">
+            <div>
+              <div class="section-label">WORKING ORDERS</div>
+              <h3>Tradovate Order Monitor</h3>
+            </div>
+
+            <span id="workingOrdersBadge" class="badge neutral">
+              0 orders
+            </span>
+          </div>
+
+          <div id="workingOrdersContainer" class="broker-list">
+            <div class="empty-state">
+              No working orders.
+            </div>
+          </div>
+        </article>
+      </section>
+
       <section class="content-grid">
         <article class="card positions-card">
           <div class="card-title-row">
@@ -206,6 +307,161 @@
             </div>
           </div>
         </article>
+      </section>
+
+
+      <!-- PHASE2A_STRATEGY_ANALYTICS -->
+      <section class="card strategy-performance-card">
+        <div class="card-title-row">
+          <div>
+            <div class="section-label">STRATEGY PERFORMANCE</div>
+            <h3>Today's VWAP Signal Analytics</h3>
+          </div>
+
+          <span id="strategyDataBadge" class="badge neutral">
+            Waiting for signals
+          </span>
+        </div>
+
+        <div class="strategy-summary-grid">
+          <div class="strategy-stat">
+            <span>Signals</span>
+            <strong id="strategySignals">0</strong>
+            <small>Entry and exit alerts</small>
+          </div>
+
+          <div class="strategy-stat">
+            <span>Completed</span>
+            <strong id="strategyCompleted">0</strong>
+            <small>Paired theoretical trades</small>
+          </div>
+
+          <div class="strategy-stat">
+            <span>Open</span>
+            <strong id="strategyOpen">0</strong>
+            <small>Unmatched entries</small>
+          </div>
+
+          <div class="strategy-stat">
+            <span>Win Rate</span>
+            <strong id="strategyWinRate">--</strong>
+            <small id="strategyWinLoss">0 wins / 0 losses</small>
+          </div>
+
+          <div class="strategy-stat">
+            <span>Gross P&amp;L</span>
+            <strong id="strategyGrossPnl">$0.00</strong>
+            <small>Theoretical fills</small>
+          </div>
+
+          <div class="strategy-stat">
+            <span>Est. Costs</span>
+            <strong id="strategyCosts">$0.00</strong>
+            <small>Configurable round-trip estimate</small>
+          </div>
+
+          <div class="strategy-stat">
+            <span>Net P&amp;L</span>
+            <strong id="strategyNetPnl">$0.00</strong>
+            <small>Gross less estimated costs</small>
+          </div>
+
+          <div class="strategy-stat">
+            <span>Profit Factor</span>
+            <strong id="strategyProfitFactor">--</strong>
+            <small id="strategyExpectancy">Expectancy --</small>
+          </div>
+        </div>
+
+        <div class="strategy-detail-grid">
+          <article class="strategy-subcard">
+            <div class="strategy-subcard-heading">
+              <div>
+                <div class="section-label">SYMBOL BREAKDOWN</div>
+                <h3>MES / MNQ / MYM</h3>
+              </div>
+            </div>
+
+            <div id="symbolPerformance" class="symbol-performance">
+              <div class="empty-state">
+                No completed theoretical trades today.
+              </div>
+            </div>
+          </article>
+
+          <article class="strategy-subcard">
+            <div class="strategy-subcard-heading">
+              <div>
+                <div class="section-label">EXECUTION COMPARISON</div>
+                <h3>Strategy vs Broker</h3>
+              </div>
+            </div>
+
+            <div class="comparison-grid">
+              <div class="comparison-header"></div>
+              <div class="comparison-header">Strategy</div>
+              <div class="comparison-header">Broker</div>
+
+              <div class="comparison-label">Completed</div>
+              <strong id="comparisonStrategyTrades">0</strong>
+              <strong id="comparisonBrokerTrades">0</strong>
+
+              <div class="comparison-label">P&amp;L</div>
+              <strong id="comparisonStrategyPnl">$0.00</strong>
+              <strong id="comparisonBrokerPnl">$0.00</strong>
+
+              <div class="comparison-label">Difference</div>
+              <strong id="comparisonDifference">$0.00</strong>
+              <strong id="comparisonExecutionScore">--</strong>
+            </div>
+
+            <div class="comparison-note">
+              Broker figures use the account values currently reported by
+              Tradovate. Strategy figures are reconstructed from logged alerts.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="card theoretical-trades-card">
+        <div class="card-title-row">
+          <div>
+            <div class="section-label">THEORETICAL TRADE LOG</div>
+            <h3>Reconstructed TradingView Trades</h3>
+          </div>
+
+          <span id="theoreticalTradeBadge" class="badge neutral">
+            0 trades
+          </span>
+        </div>
+
+        <div class="trade-table-wrap">
+          <table class="trade-table">
+            <thead>
+              <tr>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>Symbol</th>
+                <th>Side</th>
+                <th>Qty</th>
+                <th>Entry Price</th>
+                <th>Exit Price</th>
+                <th>Points</th>
+                <th>Gross P&amp;L</th>
+                <th>Est. Net</th>
+                <th>Held</th>
+                <th>Exit Reason</th>
+              </tr>
+            </thead>
+            <tbody id="theoreticalTradeBody">
+              <tr>
+                <td colspan="12" class="table-empty">
+                  No reconstructed trades yet.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section class="card signal-card">

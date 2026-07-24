@@ -105,8 +105,18 @@ function getTrailPoints(symbol) {
   const root = symbol.slice(0, 3);
   return TRAIL_POINTS_OVERRIDE[root] ?? TRAIL_POINTS;
 }
-const MAX_BARS     = 24;    // 24 × 5min = 120 min max hold
-const BAR_SECONDS  = 300;   // 5-minute bars
+const MAX_BARS     = 24;    // Legacy internal manager only
+const BAR_SECONDS  = 300;   // Legacy internal manager only
+
+// Production architecture:
+// TradingView owns all strategy exits using completed 2-minute bars.
+// Tradovate remains the execution, reconciliation, and safety layer.
+//
+// Set TRADINGVIEW_MANAGED_EXITS=false only for an intentional rollback
+// to the legacy server-side polling manager.
+const TRADINGVIEW_MANAGED_EXITS =
+  String(process.env.TRADINGVIEW_MANAGED_EXITS || 'true').toLowerCase()
+    !== 'false';
 
 // ── State ────────────────────────────────────────────────────────────────────
 let accessToken   = null;
@@ -1301,6 +1311,15 @@ function openPosition(
     barsHeld:  0,
     signalTs,
     openTs:    Date.now(),
+
+    // TradingView evaluates the validated 2-minute exit strategy.
+    // checkPositions() skips positions with externallyManaged=true,
+    // preventing the legacy 5-minute polling engine from competing
+    // with TradingView exits.
+    externallyManaged: TRADINGVIEW_MANAGED_EXITS,
+    managementSource: TRADINGVIEW_MANAGED_EXITS
+      ? 'tradingview_2min'
+      : 'tradovate_legacy_polling',
   };
   log('position_opened', {
     key,
@@ -1604,6 +1623,85 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+
+  if (
+    req.method === 'GET' &&
+    requestUrl.pathname === '/analytics'
+  ) {
+    try {
+      const raw = fs.existsSync(CFG.logFile)
+        ? fs.readFileSync(CFG.logFile, 'utf8').trim()
+        : '';
+
+      const events = raw
+        ? raw.split('\n').map(line => JSON.parse(line))
+        : [];
+
+      const counts = {};
+      const rejects = {};
+      const todayCounts = {};
+      const today = new Date().toISOString().slice(0,10);
+
+      for (const e of events) {
+
+        if (e.ts && e.ts.startsWith(today)) {
+          todayCounts[e.event] =
+            (todayCounts[e.event] || 0) + 1;
+        }
+        counts[e.event] = (counts[e.event] || 0) + 1;
+
+        if (e.event.startsWith('signal_rejected_')) {
+          const reason = e.event.replace('signal_rejected_', '');
+          rejects[reason] = (rejects[reason] || 0) + 1;
+        }
+      }
+
+      return send(200,{
+        totalEvents: events.length,
+        signals: counts.signal_received || 0,
+        accepted: counts.signal_accepted || 0,
+        orders: counts.order_placed || 0,
+        opened: counts.position_opened || 0,
+        closed:
+          (counts.position_closed || 0) +
+          (counts.position_closed_by_tradingview || 0),
+
+        acceptanceRate:
+          (counts.signal_received || 0)
+            ? Number(
+                (
+                  100 *
+                  (counts.signal_accepted || 0) /
+                  counts.signal_received
+                ).toFixed(1)
+              )
+            : 0,
+
+        rejectReasons: rejects,
+        today: {
+          signals:
+            todayCounts.signal_received || 0,
+          accepted:
+            todayCounts.signal_accepted || 0,
+          opened:
+            todayCounts.position_opened || 0,
+          closed:
+            (todayCounts.position_closed || 0) +
+            (todayCounts.position_closed_by_tradingview || 0)
+        },
+
+        eventCounts: counts
+      });
+
+    } catch(err) {
+      return send(500,{
+        ok:false,
+        error:err.message
+      });
+    }
+  }
+
+
   // ---------------------------------------------------------------------------
   // LIVE BROKER ACCOUNT SUMMARY
   // ---------------------------------------------------------------------------
@@ -1645,12 +1743,6 @@ const server = http.createServer(async (req, res) => {
       requestUrl.pathname === '/dashboard/'
     )
   ) {
-    if (!adminAuthorized(req, requestUrl)) {
-      return send(401, {
-        ok: false,
-        error: 'Dashboard authorization required'
-      });
-    }
 
     return sendDashboardFile(
       res,
@@ -1788,8 +1880,59 @@ const server = http.createServer(async (req, res) => {
       try {
         const sig = JSON.parse(body);
 
-        const requestedAction =
+        let requestedAction =
           String(sig.action || '').toUpperCase();
+
+        const incomingSignalType =
+          String(sig.signal_type || sig.reason || '').toUpperCase();
+
+        const incomingDirection =
+          String(sig.direction || '').toLowerCase();
+
+        // Normalize TradingView strategy order vocabulary into the
+        // explicit command vocabulary used by this webhook.
+
+        // TradingView strategy-close alerts describe the broker-side
+        // transaction: BUY closes a short and SELL closes a long.
+        if (
+          requestedAction === 'BUY' &&
+          incomingSignalType.includes('CLOSE') &&
+          incomingSignalType.includes('SHORT')
+        ) {
+          requestedAction = 'EXIT_SHORT';
+        }
+
+        if (
+          requestedAction === 'SELL' &&
+          incomingSignalType.includes('CLOSE') &&
+          incomingSignalType.includes('LONG')
+        ) {
+          requestedAction = 'EXIT_LONG';
+        }
+
+        // TradingView strategy-entry alerts use BUY/SELL, while this
+        // webhook internally requires ENTER_LONG/ENTER_SHORT.
+        if (
+          requestedAction === 'BUY' &&
+          (
+            incomingSignalType === 'LONG' ||
+            incomingSignalType === 'ENTER_LONG' ||
+            incomingDirection === 'long'
+          )
+        ) {
+          requestedAction = 'ENTER_LONG';
+        }
+
+        if (
+          requestedAction === 'SELL' &&
+          (
+            incomingSignalType === 'SHORT' ||
+            incomingSignalType === 'ENTER_SHORT' ||
+            incomingDirection === 'short'
+          )
+        ) {
+          requestedAction = 'ENTER_SHORT';
+        }
 
         const symbol =
           String(sig.symbol || '')
@@ -1839,6 +1982,21 @@ const server = http.createServer(async (req, res) => {
             brokerOrderPlaced: false,
             account: CFG.account,
             message: 'TradingView webhook path is working'
+          });
+        }
+
+        // TradingView can send a second human-readable alert alongside
+        // the structured JSON alert. Ignore completely empty duplicates
+        // without displaying a webhook failure in TradingView.
+        if (!symbol && !requestedAction) {
+          log('signal_ignored_empty_payload', {
+            bodyPreview: body.slice(0, 300)
+          });
+
+          return send(200, {
+            ok: true,
+            ignored: true,
+            reason: 'Empty or non-structured duplicate alert'
           });
         }
 
@@ -2125,9 +2283,30 @@ Order ID: ${exitOrder.orderId}`,
         }
 
         const key = posKey(symbol, direction);
-        if (positions[key]) {
-          log('signal_skipped_busy', { key });
-          return send(200, { ok: false, reason: 'position already open' });
+
+        // Tradovate futures positions are netted by contract. Never allow
+        // separate internal long and short states for the same root.
+        const existingSymbolPosition = Object.entries(positions)
+          .find(([, position]) => position.symbol === symbol);
+
+        if (existingSymbolPosition) {
+          const [existingKey, existingPosition] =
+            existingSymbolPosition;
+
+          log('signal_skipped_symbol_busy', {
+            requestedKey: key,
+            existingKey,
+            symbol,
+            requestedDirection: direction,
+            existingDirection: existingPosition.direction,
+          });
+
+          return send(200, {
+            ok: false,
+            reason: 'symbol already has an open position',
+            symbol,
+            existingDirection: existingPosition.direction,
+          });
         }
 
         // Place the entry order

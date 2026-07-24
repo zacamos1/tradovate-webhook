@@ -34,7 +34,7 @@ IBGW_CONTAINER = "ibgw-ib-gateway-1"
 IBGW_HOST = "127.0.0.1"
 IBGW_PORT = 4002
 
-EXPECTED_ONLINE = ["vwap-sender", "tradovate-webhook", "ibkr-webhook", "futures-webhook"]
+EXPECTED_ONLINE = ["tradovate-webhook", "ibkr-webhook"]
 RESTART_LOOP_THRESHOLD = 3  # more than 3 restarts in the check window = crash loop
 
 
@@ -305,8 +305,11 @@ def main():
     while True:
         state = load_state()
         try:
-            check_futures_sender(state)
-            check_futures_pull_failures(state)
+            # Old IBKR-routed futures monitoring disabled.
+            # Futures execution now routes through Tradovate.
+            # check_futures_sender(state)
+            # check_futures_pull_failures(state)
+
             check_ibgw(state)
             check_directional_flapping(state)
             check_pm2_health(state)
