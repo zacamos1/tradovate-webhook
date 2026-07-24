@@ -2,6 +2,19 @@
 
 This file records material repository work performed with an AI coding agent. It is not a substitute for Git history, pull-request review, or deployment records.
 
+## 2026-07-24 — Durable repository agent guidance
+
+### Scope
+
+- Added root `AGENTS.md`.
+- Captured project-owner approval boundaries, production/research separation, pull-request workflow, safety-critical change gates, and quantitative-research requirements.
+- Linked future agents to the onboarding documentation before they make changes.
+
+### Safety
+
+- Documentation only.
+- No production code, trading logic, configuration, runtime state, or deployment behavior was changed.
+
 ## 2026-07-24 — Repository onboarding documentation
 
 ### Scope
@@ -37,4 +50,3 @@ This file records material repository work performed with an AI coding agent. It
 ### Follow-up
 
 The highest-priority actions are credential rotation/history remediation, capture of authoritative VPS process configuration, and separation of source code from tracked dependencies, datasets, runtime artifacts, and backups.
-
